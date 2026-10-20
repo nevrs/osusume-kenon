@@ -10,8 +10,8 @@ X（x.com）だけで動く Chrome 拡張。X の「おすすめ」が炎上と�
 
 ## 守ること
 
-- **X へ操作を自動で送らない。** 興味がない・ミュート・ブロック・報告・返信などは、本人が押す（DESIGN.md D3）。本人のボタン 1 回で拡張が X のボタンを押す形も同じ（X の規則が禁じる「scripting the X website」。research/x-rules.md）
-- **本人のアカウントで、台本で X をスクロールしたり集めたりしない**（規約の crawling / scraping。research/x-rules.md の 5）
+- **X へ操作を自動で送らない。** 興味がない・ミュート・ブロック・報告・返信などは、本人が押す（DESIGN.md D3）。本人のボタン 1 回で拡張が X のボタンを押す形も作らない（X の規則の「scripting the X website」に当たるおそれ。当たるかは解釈。research/x-rules.md）
+- **本人のアカウントで、台本で X をスクロールしたり集めたり、X のボタンを押したりしない**（規約の crawling / scraping、自動化の規則。research/x-rules.md の 4・5）。実機の確認で X のボタンを押すのは本人
 - **X の仕組みについて書くときは、`research/x-algorithm.md` の記録とコミットを根拠にする。** 記録に無いことは「推測」と書く
 - **流用してよいコード:** attention-vaccine（nevrs/attention-vaccine、同じ作者、MIT。写したら同期しない: DESIGN.md D4）と Apache-2.0 の x-algorithm。
   bouncer（AGPL）・FeedMonitor（ライセンス無し）は読むだけで、コードを写さない
