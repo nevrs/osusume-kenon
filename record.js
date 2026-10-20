@@ -5,11 +5,11 @@
 
 const SHZ_DWELL_MS = 1000; // この間、画面に出ていたら「見た」とする
 const SHZ_RATIO = 0.6; // 投稿のこれ以上が画面に入っているとき（背の高い投稿は、画面より高いと一度も満たさず、記録されない）
-const SHZ_KEEP_DAYS = 14; // 記録を持つ日数
 const SHZ_FLUSH_MS = 4000; // まとめて保存するまでの待ち
 
 let shzRecOn = false;
-let shzGen = 0; // オン・オフ・全削除のたびに増やす。待っている間に状況が変わった処理を捨てるため
+let shzGen = 0; // オン・オフのたびに増やす。待っている間にオフ・オンされた処理を捨てるため
+let shzEpoch = 0; // 全削除のたびに増やす。待っている間に全削除された「見た」を捨てるため（オンにする処理は止めない）
 const shzSeen = new Set(); // 保存済み・保存待ちの印（同じ投稿を二重に残さない）。オフにしたら空にする
 const shzTimers = new WeakMap(); // 投稿 → 「見た」とするタイマー
 let shzWatched = new WeakSet(); // 見張りを付けた投稿の要素（X のページから見える印は付けない）
@@ -20,14 +20,14 @@ let shzMutation = null;
 
 async function shzCapture(article) {
   if (!shzRecOn || !article.isConnected) return;
-  const gen = shzGen;
+  const gen = shzGen, epoch = shzEpoch;
   const feed = shzFeedOf(document, location.pathname);
   if (!feed || shzIsAd(article)) return;
   const id = shzPostId(article);
   const text = shzPostText(article);
   if (!id || !text) return; // 画像だけの投稿は本文が無いので残さない
   const key = await shzHashId(id);
-  if (gen !== shzGen) return; // 待っている間にオフ・全削除された
+  if (gen !== shzGen || epoch !== shzEpoch) return; // 待っている間にオフ・全削除された
   if (shzSeen.has(key)) return;
   shzSeen.add(key);
   shzQueue[`rec:${key}`] = { text, feed, ts: Date.now() };
@@ -63,7 +63,10 @@ function shzStartRecording() {
   shzObserver = new IntersectionObserver((entries) => {
     for (const e of entries) {
       clearTimeout(shzTimers.get(e.target));
-      if (e.isIntersecting && e.intersectionRatio >= SHZ_RATIO) shzTimers.set(e.target, setTimeout(() => shzCapture(e.target), SHZ_DWELL_MS));
+      if (e.isIntersecting && e.intersectionRatio >= SHZ_RATIO) {
+        const g = shzGen;
+        shzTimers.set(e.target, setTimeout(() => { if (g === shzGen) shzCapture(e.target); }, SHZ_DWELL_MS)); // オフ・オンをまたいだタイマーは使わない
+      }
     }
   }, { threshold: [0, SHZ_RATIO] });
   let pending = false;
@@ -98,10 +101,10 @@ async function shzPurgeOld() {
 // オンにしたとき: 古い記録を消し、保存済みの印を覚えて、見張りを始める。待っている間にオフ・全削除されたら始めない
 async function shzTurnOn() {
   shzStopRecording(); // 前の状態を片付けて、世代を進める
-  const gen = shzGen;
+  const gen = shzGen, epoch = shzEpoch;
   const kept = await shzPurgeOld();
   if (gen !== shzGen) return;
-  for (const k of kept) shzSeen.add(k.slice(4));
+  if (epoch === shzEpoch) for (const k of kept) shzSeen.add(k.slice(4)); // 待っている間に全削除されていたら、消した記録の印は覚えない
   shzRecOn = true;
   shzStartRecording();
 }
@@ -112,8 +115,8 @@ chrome.storage.local.get({ recordEnabled: false }, (v) => {
 });
 chrome.storage.onChanged.addListener((c, area) => {
   if (area !== "local") return;
-  if (c.recordClearedAt) { // 設定画面で「すべて消す」が押された。このタブの保存待ちと「記録済み」の覚えも捨てる
-    shzGen++;
+  if (c.recordClearedAt) { // 設定画面で「すべて消す」が押された。このタブの保存待ちと「記録済み」の覚えも捨てる（記録は続ける）
+    shzEpoch++;
     shzDropPending();
   }
   if (c.recordEnabled) {

@@ -11,11 +11,14 @@ rec.addEventListener("change", () => {
 async function purgeOld() { // 期限（14 日）の過ぎた記録を消す。オフのままでも、設定画面を開いたときに消える
   const all = await chrome.storage.local.get(null);
   const recs = Object.fromEntries(Object.entries(all).filter(([k]) => k.startsWith("rec:")));
-  const old = shzPurgeKeys(recs, Date.now(), 14);
+  const old = shzPurgeKeys(recs, Date.now(), SHZ_KEEP_DAYS);
   if (old.length) await chrome.storage.local.remove(old);
 }
+let shzCountSeq = 0;
 async function showCount() {
+  const my = ++shzCountSeq;
   const all = await chrome.storage.local.get(null);
+  if (my !== shzCountSeq) return; // 後から始めた読み出しがあるので、古いほうは表示しない
   const recs = Object.fromEntries(Object.entries(all).filter(([k]) => k.startsWith("rec:")));
   const s = shzSummarize(recs);
   document.getElementById("recCount").textContent = s.total ? `${s.total} 件（おすすめ ${s.byFeed["for-you"] || 0}・フォロー中 ${s.byFeed["following"] || 0}）` : "なし";

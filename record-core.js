@@ -48,6 +48,8 @@ async function shzHashId(id) {
   return [...new Uint8Array(buf)].slice(0, 8).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+const SHZ_KEEP_DAYS = 14; // 記録を持つ日数（record.js と設定画面で共通）
+
 // 古い記録を消す対象。judged（判定済み）の本文は短く、未判定は長く持つ…は、判定の仕組みができてから決める。今は一律の日数
 function shzPurgeKeys(records, nowMs, maxAgeDays) {
   const limit = nowMs - maxAgeDays * 86_400_000;
@@ -66,4 +68,4 @@ function shzSummarize(records) {
   return out;
 }
 
-if (typeof module !== "undefined") module.exports = { shzPostId, shzPostText, shzIsAd, shzFeedOf, shzHashId, shzPurgeKeys, shzSummarize, SHZ_AD_LABELS };
+if (typeof module !== "undefined") module.exports = { SHZ_KEEP_DAYS, shzPostId, shzPostText, shzIsAd, shzFeedOf, shzHashId, shzPurgeKeys, shzSummarize, SHZ_AD_LABELS };

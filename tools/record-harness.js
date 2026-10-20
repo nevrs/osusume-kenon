@@ -56,7 +56,8 @@ function setup({ url = "https://x.com/home", tab = "おすすめ", stored = {}, 
   const art = (id) => [...d.querySelectorAll("article")].find((a) => a.querySelector(`a[href$="/status/${id}"]`));
   const see = (id, ratio = 0.8) => { for (const io of ios) if (io.observed.has(art(id))) io.cb([{ target: art(id), isIntersecting: ratio > 0, intersectionRatio: ratio }]); };
   const setEnabled = (v) => { store.recordEnabled = v; for (const f of listeners) f({ recordEnabled: { newValue: v } }, "local"); };
-  const clearAll = () => { for (const k of Object.keys(store)) if (k.startsWith("rec:")) delete store[k]; store.recordClearedAt = Date.now(); for (const f of listeners) f({ recordClearedAt: { newValue: store.recordClearedAt } }, "local"); };
+  // 設定画面と同じ順: 先に recordClearedAt を書いて開いているタブに伝え、そのあとで記録を消す
+  const clearAll = () => { store.recordClearedAt = Date.now(); for (const f of listeners) f({ recordClearedAt: { newValue: store.recordClearedAt } }, "local"); for (const k of Object.keys(store)) if (k.startsWith("rec:")) delete store[k]; };
   const recs = () => Object.fromEntries(Object.entries(store).filter(([k]) => k.startsWith("rec:")));
   return { w, d, store, ios, art, see, setEnabled, clearAll, recs, writes };
 }
@@ -160,6 +161,15 @@ const check = (name, ok) => results.push(`${ok ? "OK" : "NG"}  ${name}`);
   t.see("111");
   await wait(5300);
   check("オフで捨てた投稿も、オンに戻したあとに見れば記録できる", t.recs()[`rec:${hashOf("111")}`]?.text === "怒っている投稿です");
+
+  t = setup({ enabled: false });
+  await wait(100);
+  t.setEnabled(true);
+  t.clearAll(); // オンにする準備の途中で「すべて消す」
+  await wait(200);
+  t.see("111");
+  await wait(5300);
+  check("オンの準備中に「すべて消す」が届いても、記録は続く", t.recs()[`rec:${hashOf("111")}`]?.text === "怒っている投稿です");
 
   console.log(results.join("\n"));
   process.exit(results.some((x) => x.startsWith("NG")) ? 1 : 0);
