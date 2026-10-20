@@ -27,13 +27,13 @@ Phoenix（Grok 由来の予測モデル）が「この人がこの投稿に各�
 | 行動 | `home-mixer/params/param.rs` | `vm-ranker/params.rs` | メモ |
 |---|---:|---:|---|
 | いいね | 0.66 | 0.5 | |
-| 返信 | 5.0 | 5.0 | 相互フォローの相手の**元の投稿**（返信・リポストでないもの）への返信の確率には 15.0 を足す → 20.0（`xai-value-model/weights.rs` `reply_weight_for`、`inputs.rs`） |
+| 返信 | 5.0 | 5.0 | 相互フォローの相手の**元の投稿**（返信・リポストでないもの）への返信は、重みに 15.0 を足す → 20.0（`xai-value-model/weights.rs` `reply_weight_for`、`inputs.rs`） |
 | 引用 | 5.0 | 5.0 | |
 | リポスト | 1.0 | | |
 | 共有 | 2.0 | | DM で共有 5.0、リンクをコピー 20.0 |
 | 作者をフォロー | 4.0 | | |
 | 投稿のクリック | 0.3 | | クリック後の滞在時間 0.4、リンクを開く 0.2、引用元のクリック 0.05 |
-| 画像を広げる / 動画を開く | 0.05 / 0.02 | — / 0.07 | |
+| 画像を広げる / 動画を開く | 0.05 / 0.02 | 0.05 / 0.07 | |
 | 滞在（見ていた） | 0.05 | | 連続値の滞在時間 0.006（vm-ranker は 0.004） |
 | 興味がない | −52.272 | −47.52 | |
 | 作者をミュート | −58.8 | | |
@@ -49,11 +49,11 @@ Phoenix（Grok 由来の予測モデル）が「この人がこの投稿に各�
 
 1. **返信と引用の重みは、いいねの 7.6〜10 倍**（0.66 なら 7.6 倍、0.5 なら 10 倍）。重みは「その行動の確率」に掛かる。
    怒りの返信も、賛同の返信も、点数の上では同じ「返信」。言い争いに加わりそうな投稿ほど上に来る作り。
-   感情の良し悪しを見る項は無い（`toxic` `polariz` `outrage` `civil` `controversial` は、リポ全体を検索してテストの文字列以外に出てこない）。
+   感情の良し悪しを見る項は無い（`toxic` `polariz` `outrage` `civil` はリポ全体に出てこない。`controversial` は、画像の警告画面の理由 `DisturbingOrControversial`（`visibility-filtering-client/graphql_results.rs`）とテストにだけ出る）。
 2. **否定の反応の重みは大きいが、掛かる相手は「その人の確率」。** 興味がない・ミュート・ブロックは、
    「この人が同じような投稿に興味がないを押す確率」に掛かる。本人が押した履歴が、その確率を上げる。
    X 自身もコメントで「報告 1 回でいいね 468 回分が消える、という読み方は誤り」と書いている（重みの比を回数の比として読まない）。
-3. **数えられるのは「おすすめ」に出た投稿への行動だけ**（param.rs のコメント）。直接開いた投稿への行動は並べ方に入らない。
+3. **数えられるのは、ホームのタイムラインに出た投稿への行動だけ**（param.rs のコメント「Home Timeline」）。直接開いた投稿への行動は並べ方に入らない。「フォロー中」のタブ（`reverse_chron_posts_pipeline.rs`）を含むかは未確認。
 4. **読み飛ばし・滞在がどれだけ並べ方を変えるかは、重みだけでは分からない。** 重みの比は効果の大きさではない（2 と同じ理由）。
    行動の履歴は予測の入力に入るので、何らかの形では効くはず（推測）。
 5. **相互フォローの相手の元の投稿には、返信の重みに大きな上乗せ**（2026-07 に導入、`docs/BIDIRECTIONAL_BOOST_CHANGE.md`）。
@@ -62,12 +62,12 @@ Phoenix（Grok 由来の予測モデル）が「この人がこの投稿に各�
    - `home-mixer/models/brand_safety.rs` の `compute_verdict` が、ラベルから Safe／LowRisk／MediumRisk／HighRisk を決める。
      ラベルには、Grok による「広告に不適」（`GROK_NSFA`）、コミュニティノートが付いた投稿（`NSFA_COMMUNITY_NOTE`）、`DO_NOT_AMPLIFY` などがある
    - 判定を付ける処理（`AdsBrandSafetyVfHydrator`）は、点数付けと上位の選び出しの**後**に動く（`home-mixer/candidate_pipeline/phoenix_candidate_pipeline.rs`）。
-     判定を読むのは `home-mixer/ads/` と `home-mixer/filters/ad_adjacent_served_filter.rs` だけで、点数付け（scorers・vm-ranker・xai-value-model）と表示の規則（visibility-filtering）には出てこない
-   - 広告の並べ方の既定は `multi_risk`（param.rs の `AdsBlenderType`）。安全な投稿を広告の上下に持ってきて、残りを点数順に並べる。
-     危ない投稿は広告の隣に来ないだけで、下げられるわけではない
+     判定を読むのは `home-mixer/ads/` と `home-mixer/filters/ad_adjacent_served_filter.rs`、ほかに記録用（`side_effects/ads_injection_logging_side_effect.rs`）と「フォロー中」の出力への受け渡し（`sources/reverse_chron_posts_source.rs`）で、点数付け（scorers・vm-ranker・xai-value-model）と表示の規則（visibility-filtering）には出てこない
+   - 広告の並べ方の既定は `multi_risk`（param.rs の `AdsBlenderType`）。広告ごとに、上下に置ける投稿の危なさを選び、残りを点数順に並べる。
+     リスクを許す広告なら MediumRisk の投稿の隣にも置く（`multi_risk_blender.rs` の `is_bsr_high_ad`）。どちらにしても、危ない投稿を下げる処理ではない
    - 判定は応答として外にも返している（`home-mixer/scored_posts_server.rs`）。受け取った側（リポの外）がどう使うかは分からない
    - 読み: **広告主は守られるが、読む人を守る使い方はこのリポの中には無い。** 何を「広告に不適」とするかの Grok への指示文は公開されていない
-   - 別に、表示の規則の側で `DO_NOT_AMPLIFY` は効く: 投稿に付けば作者以外の全員に、アカウントに付けばフォローしていない人に、表示しない（`visibility-filtering/rules/tweet_rules.rs`・`author_rules.rs`）。付ける基準は未読
+   - 別に、表示の規則の側で `DO_NOT_AMPLIFY` は効く。ただし推薦の枠（`TIMELINE_HOME_RECOMMENDATIONS`・`IMMERSIVE_EXPANDED_RECOMMENDATIONS`、`visibility-filtering/rules/levels.rs`）の中だけ: 投稿に付けば作者以外の全員に、アカウントに付けばフォローしていない人に、推薦として出さない（`tweet_rules.rs`・`author_rules.rs`）。通常のホーム（`TIMELINE_HOME`）の規則には入っていない。付ける基準は未読
 7. **投稿の埋め込み（似た投稿を探すための数値）の一つは「話題・感情・関心の集まり」で探すよう指示されている**
    （`grox/flows/mm_emb/embedder.py` の V5）。並行する V8.2 などの指示文は「話題・意図・主な固有名・反応されやすさ」で、感情を含まない。どれが使われているかは未確認
 
