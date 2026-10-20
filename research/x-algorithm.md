@@ -71,9 +71,17 @@ Phoenix（Grok 由来の予測モデル）が「この人がこの投稿に各�
 7. **投稿の埋め込み（似た投稿を探すための数値）の一つは「話題・感情・関心の集まり」で探すよう指示されている**
    （`grox/flows/mm_emb/embedder.py` の V5）。並行する V8.2 などの指示文は「話題・意図・主な固有名・反応されやすさ」で、感情を含まない。どれが使われているかは未確認
 
+8. **点数を予測するときに読む本人の行動の履歴は、直近の最大 1024 件**（`home-mixer/params/param.rs` の `MaxSeqLengthScoring` 1024、取り出し側の `MaxSeqLengthRetrieval` も 1024。
+   `home-mixer/query_hydrators/scoring_sequence_query_hydrator.rs` が履歴を取ってくる）。区切りは日数ではなく件数と読める（推測。どの行動が 1 件に数えられるかは集計の種類 `DenseWithFavVqvCleaned` しだいで、中身は未読）。
+   読み: 怒りの返信や炎上した投稿への反応をやめても、それが予測から消えるのは、その後の行動で 1024 件分押し出されたとき（推測）。たくさん使う人ほど早く入れ替わる。
+   話題を 28 日分集める仕組み（`HistoryTopicsWindowDays` 28）もあるが、既定では使われていない（`HistoryTopicsEnabled` false）
+9. **似た投稿が並ばないよう、点数上位 150 件を選び直す**（`vm-ranker/dpp.rs`、`vm-ranker/params.rs` の `DppEnabled` true・`DppTheta` 0.65・`DppMaxSelectedRank` 150）。
+   似ているかどうかは投稿の埋め込み（`vm-ranker/embedding_store.rs` の mm 埋め込み）で測る。どの版の埋め込みかはこのリポでは確かめられなかった。
+   7 の V5（「話題・感情・関心の集まり」で似た投稿を探す）が使われているなら、同じ感情の投稿が続くのを避ける向きに働く（推測）。選び直しは点数を少し捨てる代わりに似た投稿を離すもので、対立する投稿を下げる仕組みではない
+
 ## まだ読んでいないところ
 
-- `vm-ranker/` の並べ直し（似た投稿を離す）の中身。対立する投稿が一緒に並ぶかに関係しうる
-- `phoenix/`: 行動の履歴をどれだけさかのぼるか（本人の行動がいつまで残るか）
+- `vm-ranker/` の選び直しで使う埋め込みの版（7 の V5 か V8 か）
+- 履歴の集計の種類（`DenseWithFavVqvCleaned`）に、どの行動が入るか（返信・引用・滞在など）
 - 返信欄の並び（会話の中の順番）はこのリポの範囲外の可能性
-- `home-mixer/sources/popular_posts_source.rs`: 共有の人気投稿の一覧がどう選ばれるか
+- 共有の人気投稿の一覧（`home-mixer/sources/popular_posts_source.rs`）は、作り済みの一覧を読むだけ。一覧の作り方はこのファイルには無い
