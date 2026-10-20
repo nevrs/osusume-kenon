@@ -12,10 +12,18 @@ const html = `<body>
     <div><button data-testid="tweetButton">すべてポスト</button></div></div>
 </body>`;
 
-function setup(availability = "available") {
+function setup(availability = "available", pauseEnabled = true) {
   const dom = new JSDOM(html, { runScripts: "outside-only", pretendToBeVisual: true });
   const w = dom.window;
   const counts = { create: 0, prompt: 0 };
+  // chrome.storage の偽物（pauseEnabled が "unset" なら何も保存されていない状態 = 拡張の初期値オフ）
+  const listeners = [];
+  const store = pauseEnabled === "unset" ? {} : { pauseEnabled };
+  w.chrome = { storage: {
+    local: { get: (defaults, cb) => cb({ ...defaults, ...store }) },
+    onChanged: { addListener: (f) => listeners.push(f) },
+  } };
+  const setPause = (v) => { store.pauseEnabled = v; for (const f of listeners) f({ pauseEnabled: { newValue: v } }, "local"); };
   w.LanguageModel = {
     availability: async () => availability,
     create: async () => {
@@ -44,7 +52,7 @@ function setup(availability = "available") {
   const click = (b) => { const e = new w.MouseEvent("click", { bubbles: true, cancelable: true }); b.dispatchEvent(e); return e.defaultPrevented; };
   const ctrlEnter = (box) => { const e = new w.KeyboardEvent("keydown", { key: "Enter", ctrlKey: true, bubbles: true, cancelable: true }); box.dispatchEvent(e); return e.defaultPrevented; };
   const shown = () => !!d.getElementById("shizume-pause");
-  return { w, d, home, th0, th1, homeBtn, dlgBtn, sent, type, click, ctrlEnter, shown, counts };
+  return { w, d, home, th0, th1, homeBtn, dlgBtn, sent, type, click, ctrlEnter, shown, counts, setPause };
 }
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -108,6 +116,18 @@ const check = (name, ok) => results.push(`${ok ? "OK" : "NG"}  ${name}`);
   t.type(t.home, "黙れ");
   await wait(1400);
   check("組み込み AI が無ければ止めない", t.click(t.homeBtn) === false);
+
+  t = setup("available", "unset"); // 設定に何も無い = 初期値（オフ）
+  t.type(t.home, "黙れ");
+  await wait(1400);
+  check("初期値（オフ）では下書きを判定しない", t.counts.prompt === 0);
+  check("初期値（オフ）では止めない", t.click(t.homeBtn) === false && t.ctrlEnter(t.home) === false);
+
+  t = setup();
+  t.type(t.home, "黙れ");
+  await wait(1400);
+  t.setPause(false);
+  check("途中でオフにしたら、判定済みの攻撃でも止めない", t.click(t.homeBtn) === false && !t.shown());
 
   console.log(results.join("\n"));
   process.exit(results.some((r) => r.startsWith("NG")) ? 1 : 0);

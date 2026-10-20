@@ -1,8 +1,10 @@
 {
   "manifest_version": 3,
   "name": "shizume",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "X のおすすめが炎上と対立に点数を付ける仕組みから、あなたを守る",
+  "permissions": ["storage"],
+  "options_page": "options.html",
   "content_scripts": [
     {
       "matches": ["https://x.com/*"],

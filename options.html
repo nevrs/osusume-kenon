@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>shizume の設定</title>
+<style>
+  body { font: 15px/1.7 system-ui, sans-serif; max-width: 640px; margin: 24px auto; padding: 0 16px; color: #1d2a35; }
+  label { display: flex; gap: 10px; align-items: flex-start; }
+  input { margin-top: 6px; }
+  .note { color: #555; font-size: 13px; margin: 4px 0 0 26px; }
+</style>
+</head>
+<body>
+<h1>shizume の設定</h1>
+<section>
+  <label><input type="checkbox" id="pauseEnabled"> <span><strong>送る前の一呼吸</strong>（初期値はオフ）</span></label>
+  <p class="note">オンにすると、返信・引用・投稿の下書きを、この端末の中の AI（Chrome の組み込み AI）で判定します。
+    相手を攻撃していると読めるときだけ、送信を一度止めて X の仕組みを伝えます。もう一度押せば、そのまま送れます。
+    下書きは端末の外に出ず、保存もしません。判定は誤ることがあります。組み込み AI が使えない端末では何もしません。</p>
+  <p class="note">オフのあいだは、下書きを読むことも判定することもしません。</p>
+</section>
+<p id="saved" class="note" aria-live="polite"></p>
+<script src="options.js"></script>
+</body>
+</html>

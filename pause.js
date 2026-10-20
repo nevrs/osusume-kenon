@@ -1,6 +1,14 @@
 // 送る前の一呼吸（DESIGN.md D5 の a・D7）。
 // 入力が止まったら下書きを判定しておき、送信（ボタン・Ctrl+Enter）の時点で、今の下書きが「攻撃」と分かっているときだけ、その 1 回を止める。
 // 拡張は送信しない。本人がもう一度押せば X がふつうに送る（D3）。
+// 設定でオンにしたときだけ動く（初期値はオフ。DESIGN.md D7）。オフのあいだは下書きを読まず、判定もしない。
+
+let shzPauseOn = false;
+chrome.storage.local.get({ pauseEnabled: false }, (v) => { shzPauseOn = v.pauseEnabled === true; });
+chrome.storage.onChanged.addListener((c, area) => {
+  if (area === "local" && c.pauseEnabled) shzPauseOn = c.pauseEnabled.newValue === true;
+  if (!shzPauseOn) shzClosePause?.();
+});
 
 const SHZ_IDLE_MS = 1200; // 入力が止まってから判定するまで
 const shzStates = new WeakMap(); // 入力欄 → {text, result, passed, timer}
@@ -15,6 +23,7 @@ function shzStateOf(composer) {
 
 // 入力が止まったら判定する。結果が返ったときに下書きが変わっていれば捨てる
 document.addEventListener("input", (e) => {
+  if (!shzPauseOn) return;
   const composer = e.target.closest?.(X_DOM.composer);
   if (!composer) return;
   const s = shzStateOf(composer);
@@ -40,6 +49,7 @@ function shzComposersFor(button) {
 
 // 止めるべき入力欄があれば、表示を出せたときだけ止める（表示を出せずに止めると、理由の分からないまま送れなくなる）
 function shzMaybePause(e, composers, anchor) {
+  if (!shzPauseOn) return;
   const target = composers.find((c) => shzShouldPause(shzStates.get(c), shzText(c)));
   if (!target) {
     shzClosePause(); // 止めずに送る押下。前の表示は役目を終えた
