@@ -29,6 +29,7 @@ document.addEventListener("input", (e) => {
   const s = shzStateOf(composer);
   clearTimeout(s.timer);
   s.timer = setTimeout(async () => {
+    if (!shzPauseOn) return; // 待つあいだにオフにされた。読まない（判定中のものは止められないが、結果は使わない: shzMaybePause）
     const text = shzText(composer);
     if (!text) return;
     const result = await shzJudge(text);

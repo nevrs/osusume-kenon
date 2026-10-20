@@ -12,7 +12,10 @@ const html = `<body>
     <div><button data-testid="tweetButton">すべてポスト</button></div></div>
 </body>`;
 
-function setup(availability = "available", pauseEnabled = true) {
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// storageDelay: 設定を読み終わるまでの時間（本物の Chrome でも後から返る）。ready: 読み終わるまで待ってから返すか
+async function setup(availability = "available", pauseEnabled = true, { storageDelay = 50, ready = true } = {}) {
   const dom = new JSDOM(html, { runScripts: "outside-only", pretendToBeVisual: true });
   const w = dom.window;
   const counts = { create: 0, prompt: 0 };
@@ -20,7 +23,7 @@ function setup(availability = "available", pauseEnabled = true) {
   const listeners = [];
   const store = pauseEnabled === "unset" ? {} : { pauseEnabled };
   w.chrome = { storage: {
-    local: { get: (defaults, cb) => cb({ ...defaults, ...store }) },
+    local: { get: (defaults, cb) => setTimeout(() => cb({ ...defaults, ...store }), storageDelay) },
     onChanged: { addListener: (f) => listeners.push(f) },
   } };
   const setPause = (v) => { store.pauseEnabled = v; for (const f of listeners) f({ pauseEnabled: { newValue: v } }, "local"); };
@@ -52,15 +55,15 @@ function setup(availability = "available", pauseEnabled = true) {
   const click = (b) => { const e = new w.MouseEvent("click", { bubbles: true, cancelable: true }); b.dispatchEvent(e); return e.defaultPrevented; };
   const ctrlEnter = (box) => { const e = new w.KeyboardEvent("keydown", { key: "Enter", ctrlKey: true, bubbles: true, cancelable: true }); box.dispatchEvent(e); return e.defaultPrevented; };
   const shown = () => !!d.getElementById("shizume-pause");
+  if (ready) await wait(storageDelay + 20);
   return { w, d, home, th0, th1, homeBtn, dlgBtn, sent, type, click, ctrlEnter, shown, counts, setPause };
 }
 
-const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const results = [];
 const check = (name, ok) => results.push(`${ok ? "OK" : "NG"}  ${name}`);
 
 (async () => {
-  let t = setup();
+  let t = await setup();
   t.type(t.th0, "お前は馬鹿だ。黙れ");
   check("判定前に押すと止めない（X が送る）", t.click(t.dlgBtn) === false && t.sent.at(-1) === "dialog" && !t.shown());
   await wait(1400);
@@ -98,7 +101,7 @@ const check = (name, ok) => results.push(`${ok ? "OK" : "NG"}  ${name}`);
   await wait(1200);
   check("入力欄が消えたら表示も消える", !t.shown());
 
-  t = setup();
+  t = await setup();
   t.type(t.home, "黙れ");
   await wait(1400);
   const append = t.d.body.append;
@@ -106,28 +109,52 @@ const check = (name, ok) => results.push(`${ok ? "OK" : "NG"}  ${name}`);
   check("表示を作れなければ止めない（理由の見えないまま止めない）", t.click(t.homeBtn) === false && t.sent.at(-1) === "home");
   t.d.body.append = append;
 
-  t = setup("downloadable");
+  t = await setup("downloadable");
   t.type(t.home, "黙れ");
   await wait(1400);
   check("モデルが未ダウンロードなら作らず、止めない", t.counts.create === 0 && t.click(t.homeBtn) === false);
 
-  t = setup();
+  t = await setup();
   delete t.w.LanguageModel;
   t.type(t.home, "黙れ");
   await wait(1400);
   check("組み込み AI が無ければ止めない", t.click(t.homeBtn) === false);
 
-  t = setup("available", "unset"); // 設定に何も無い = 初期値（オフ）
+  t = await setup("available", "unset"); // 設定に何も無い = 初期値（オフ）
   t.type(t.home, "黙れ");
   await wait(1400);
   check("初期値（オフ）では下書きを判定しない", t.counts.prompt === 0);
   check("初期値（オフ）では止めない", t.click(t.homeBtn) === false && t.ctrlEnter(t.home) === false);
 
-  t = setup();
+  t = await setup();
+  await wait(100);
   t.type(t.home, "黙れ");
   await wait(1400);
+  check("（前提）オンなら止めて表示を出す", t.click(t.homeBtn) === true && t.shown());
   t.setPause(false);
-  check("途中でオフにしたら、判定済みの攻撃でも止めない", t.click(t.homeBtn) === false && !t.shown());
+  check("途中でオフにしたら、出ていた表示が消える", !t.shown());
+  t.type(t.home, "黙れよ");
+  await wait(1400);
+  check("途中でオフにしたら、判定もせず止めもしない", t.click(t.homeBtn) === false && !t.shown());
+
+  t = await setup();
+  t.type(t.home, "黙れ");
+  await wait(300);
+  t.setPause(false); // 入力してから判定が始まるまでの間にオフ
+  await wait(1400);
+  check("入力の直後にオフにしたら、その下書きは判定しない", t.counts.prompt === 0);
+
+  t = await setup("available", "unset");
+  await wait(100);
+  t.setPause(true);
+  t.type(t.home, "黙れ");
+  await wait(1400);
+  check("オンにすれば、ページを開き直さなくても止める", t.click(t.homeBtn) === true && t.shown());
+
+  t = await setup("available", true, { storageDelay: 2000, ready: false });
+  t.type(t.home, "黙れ"); // 設定を読み終わる前の入力。判定にかかる時間より長く待ってから押す
+  await wait(1400);
+  check("設定を読み終わる前は判定せず、止めない", t.counts.prompt === 0 && t.click(t.homeBtn) === false);
 
   console.log(results.join("\n"));
   process.exit(results.some((r) => r.startsWith("NG")) ? 1 : 0);

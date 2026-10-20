@@ -8,7 +8,7 @@
   "content_scripts": [
     {
       "matches": ["https://x.com/*"],
-      "js": ["x-dom.js", "judge.js", "content.js", "pause.js"],
+      "js": ["x-dom.js", "judge.js", "pause.js"],
       "run_at": "document_idle"
     }
   ]
