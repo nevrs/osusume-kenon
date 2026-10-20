@@ -12,6 +12,14 @@ const X_DOM = {
   quote: 'div[role="link"]', // 引用された投稿の外枠
   // 返信・リポスト・いいね・ブックマーク・表示の数を、まとめて読み上げ用の文に持つ行
   actionBar: '[role="group"][aria-label]',
+  // 投稿の入力欄と送信ボタン（2026-10-20、日本語の画面で確認。文字は入れず、送信は押していない）:
+  //   投稿の詳細ページの下の返信欄: 入力欄 + tweetButtonInline（「返信」、空のときは aria-disabled="true"）
+  //   タイムラインの返信ボタンから開く窓（role="dialog"、URL は /compose/post）: 入力欄 + tweetButton（「返信」）。窓の中に返信先の投稿がある
+  //   引用（リポスト → 「引用する」）の窓: 入力欄 + tweetButton（「ポストする」、空でも押せる）。新しい投稿の窓と同じ文字で、見分け方は未確認
+  //   ホームの上の新しい投稿の欄も、入力欄 + tweetButtonInline（文字は「ポストする」）
+  //   入力欄は contenteditable の role="textbox"、aria-label「ポスト本文」。Ctrl+Enter でも送れる（X の一般的な作り。この日は試していない）
+  composer: '[data-testid^="tweetTextarea_"][role="textbox"]',
+  sendButton: '[data-testid="tweetButton"], [data-testid="tweetButtonInline"]',
 };
 
 // 「1,234」「1.2万」「3.4K」「5M」などを数にする。読めなければ null
