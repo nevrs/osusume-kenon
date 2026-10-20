@@ -20,25 +20,34 @@ SHZ_JUDGE.schema = {
 };
 
 const SHZ_LANG = { expectedInputs: [{ type: "text", languages: ["ja"] }], expectedOutputs: [{ type: "text", languages: ["ja"] }] };
-let shzBase = null; // 問いを読ませた元のやりとり。文ごとに複製して使う
+let shzBase = null; // 問いを読ませた元のやりとり（の約束）。文ごとに複製して使う。同時に 2 つ作らないよう、すぐに入れる
+
+async function shzMakeBase() {
+  if ((await LanguageModel.availability(SHZ_LANG)) !== "available") return null; // ダウンロードを始めない
+  return LanguageModel.create({ ...SHZ_LANG, initialPrompts: [{ role: "system", content: SHZ_JUDGE.system }] });
+}
 
 // 下書きを判定して {attack, anger, argument, question} を返す。使えなければ null
 async function shzJudge(text) {
   if (typeof LanguageModel === "undefined") return null;
+  const pending = (shzBase ??= shzMakeBase());
+  let base = null, s = null;
   try {
-    if (!shzBase) {
-      if ((await LanguageModel.availability(SHZ_LANG)) !== "available") return null; // ダウンロードを始めない
-      shzBase = LanguageModel.create({ ...SHZ_LANG, initialPrompts: [{ role: "system", content: SHZ_JUDGE.system }] });
+    base = await pending;
+    if (!base) {
+      if (shzBase === pending) shzBase = null; // まだ使えない。次の判定で確かめ直す
+      return null;
     }
-    const s = await (await shzBase).clone(); // 前の下書きの影響を残さない
-    try {
-      return JSON.parse(await s.prompt(`返信の下書き:\n${text}`, { responseConstraint: SHZ_JUDGE.schema }));
-    } finally {
-      s.destroy();
-    }
+    s = await base.clone(); // 前の下書きの影響を残さない
+    return JSON.parse(await s.prompt(`返信の下書き:\n${text}`, { responseConstraint: SHZ_JUDGE.schema }));
   } catch {
-    shzBase = null;
+    if (shzBase === pending) { // 壊れた元は片付けて、次の判定で作り直す
+      shzBase = null;
+      base?.destroy();
+    }
     return null;
+  } finally {
+    s?.destroy();
   }
 }
 
