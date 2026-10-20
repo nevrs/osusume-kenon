@@ -26,7 +26,7 @@
 
 方針は DESIGN.md D8（組み込み AI に合わせる。他人の投稿に 1 件ずつ印を付けない）。
 
-1. 記録（b）の問いを作って測る: 「怒りや敵意の強さ」を組み込み AI で 0〜100。手元の例文（vaccine の flame・critique、flame-extra、drafts、普通の投稿）で、
+1. （測定中 2026-10-21: tools/anger-probe.js の single・split × 150 本 × 3 回を Chrome のタブで実行中。例文は tools/eval/neutral.json を足した。結果が出たら research/anger-record.md に書く）記録（b）の問いを作って測る: 「怒りや敵意の強さ」を組み込み AI で 0〜100。手元の例文（vaccine の flame・critique、flame-extra、drafts、普通の投稿）で、
    怒り・敵意のある文とない文を分けられるか。左右を入れ替えた組で偏らないか。各文 3 回。本人のアカウントには触れない
 2. 記録（b）の試作: 「おすすめ」と「フォロー中」で画面に出た投稿を、後ろで順番に判定し、件数だけを保存（本文は残さない）
 3. 実機の確認（本人の操作が要る）: 拡張の読み込み → 組み込み AI が content script から使えるか、一呼吸・記録が動くか。X のボタンを押すのは本人
