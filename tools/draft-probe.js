@@ -12,13 +12,13 @@
     question: "相手に質問している",
   };
   const VARIANTS = {
-    // D1: 攻撃だけを1問で
-    D1: {
+    // single: 攻撃だけを1問で
+    single: {
       system: `あなたは SNS の返信の下書きを読み、次の説明に当てはまる度合いを 0〜100 の整数で答える。100 は明らかに当てはまる、0 はまったく当てはまらない。\n説明: ${ATTACK}`,
       schema: { type: "object", properties: { attack: SCORE }, required: ["attack"] },
     },
-    // D2: 部品に分けて聞く。一呼吸は attack で決め、anger などは記録だけ
-    D2: {
+    // split: 部品に分けて聞く。一呼吸は attack で決め、anger などは記録だけ
+    split: {
       system: "あなたは SNS の返信の下書きを読み、次の各項目に当てはまる度合いを 0〜100 の整数で答える。100 は明らかに当てはまる、0 はまったく当てはまらない。\n" +
         Object.entries(PARTS).map(([k, v]) => `${k}: ${v}`).join("\n"),
       schema: { type: "object", properties: Object.fromEntries(Object.keys(PARTS).map((k) => [k, SCORE])), required: Object.keys(PARTS) },
