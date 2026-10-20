@@ -8,10 +8,11 @@ function scan(root) {
     const label = countLabel(post);
     if (label == null || label === post.dataset.shizumeLabel) continue;
     post.dataset.shizumeLabel = label;
-    const c = countsOf(label);
-    post.dataset.shizumeReplies = c.replies;
-    post.dataset.shizumeLikes = c.likes;
-    post.dataset.shizumeReposts = c.reposts;
+    const c = countsOf(label, document.documentElement.lang);
+    for (const [k, v] of [["shizumeReplies", c.replies], ["shizumeLikes", c.likes], ["shizumeReposts", c.reposts]]) {
+      if (v == null) delete post.dataset[k];
+      else post.dataset[k] = v;
+    }
   }
 }
 

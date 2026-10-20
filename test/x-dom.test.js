@@ -41,9 +41,14 @@ test("parseActionLabel: 数の無い文は null", () => {
 
 test("実機の X（日本語のおすすめ 45 件）: すべて読め、返信数が返信ボタンの数と一致する", () => {
   for (const { label, replyButton } of fixture.rows) {
-    const c = countsOf(label);
+    const c = countsOf(label, "ja");
     assert.ok(c, label);
     assert.equal(c.replies, replyButton, label);
     assert.ok(c.views > 0, label);
   }
+});
+
+test("countsOf: 日本語以外では文に無い種類を 0 にしない", () => {
+  assert.equal(countsOf("20 likes", "en").replies, null);
+  assert.equal(countsOf("20 件のいいね", "ja").replies, 0);
 });

@@ -1,8 +1,10 @@
 // X の画面の部品の場所と、そこから数を読む関数。
 // 投稿・本文・引用の場所は attention-vaccine の sites.js（30496cd、2026-09-28・10-09 に実機で確認）から写した。
-// 数の読み方は、日本語のおすすめ 45 件で確認（2026-10-20、test/fixtures/ja-home-2026-10-20.json）:
-//   どの投稿にも数の行がちょうど1つ。数は省略しない正確な値。0 件の種類は文から省く。引用の枠の中に数の行は無い。
-//   X は画面の外に出た投稿の要素を消す（画面にある投稿は常に 6 件前後）。英語の画面は未確認
+// 数の読み方は、日本語のおすすめ 45 件で確認（2026-10-20）:
+//   保存した分（test/fixtures/ja-home-2026-10-20.json）: 数は省略しない正確な値。文に返信が無い投稿は、返信ボタンも 0 件
+//   ページ上で数えただけの分（保存していない）: どの投稿にも数の行がちょうど1つ。引用のある 6 件で、引用の枠の中に数の行は無い。
+//   画面にある投稿の要素は 6 件前後（画面の外に出ると消える）
+//   英語の画面は未確認
 
 const X_DOM = {
   post: 'article[data-testid="tweet"]',
@@ -48,11 +50,12 @@ function parseActionLabel(label) {
   return found ? counts : null;
 }
 
-// 数の行の文から数を取り、文に無い種類を 0 とする（日本語では 0 件の種類を省くと確認済み。英語は未確認）
-function countsOf(label) {
+// 数の行の文から数を取る。日本語の画面では、文に無い種類を 0 とする（返信は 0 件を省くと確認済み。
+// いいね・リポスト・ブックマークは同じ作りと推測）。ほかの言語では null のまま（読めなかったのかもしれない）
+function countsOf(label, lang) {
   const c = parseActionLabel(label);
   if (!c) return null;
-  for (const k of Object.keys(c)) c[k] ??= 0;
+  if (/^ja/.test(lang || "")) for (const k of Object.keys(c)) c[k] ??= 0;
   return c;
 }
 
