@@ -1,0 +1,92 @@
+// 「おすすめ」で見せられた投稿の記録（DESIGN.md D9）。設定でオンにしたときだけ動く（初期値はオフ）。
+// 画面に 1 秒以上出ていた投稿の本文を、端末の中（chrome.storage.local）に残す。X へは何も送らず、X の画面を動かさない（スクロールもしない）。
+// 残すもの: 印にした ID・本文・おすすめ/フォロー中の別・時刻。投稿者名・リンクは残さない。古い記録は自動で消す。
+
+const SHZ_DWELL_MS = 1000; // この間、画面に出ていたら「見た」とする
+const SHZ_RATIO = 0.6; // 投稿のこれ以上が画面に入っているとき
+const SHZ_KEEP_DAYS = 14; // 記録を持つ日数
+const SHZ_FLUSH_MS = 4000; // まとめて保存する間隔
+
+let shzRecOn = false;
+const shzSeen = new Set(); // 保存済み・保存待ちの印（同じ投稿を二重に残さない）
+const shzTimers = new WeakMap(); // 投稿 → 「見た」とするタイマー
+const shzQueue = {}; // 保存待ち {rec:<印>: {...}}
+let shzFlushTimer = 0;
+let shzObserver = null;
+let shzMutation = null;
+
+async function shzCapture(article) {
+  if (!shzRecOn || !article.isConnected) return;
+  const feed = shzFeedOf(document, location.pathname);
+  if (!feed || shzIsAd(article)) return;
+  const id = shzPostId(article);
+  const text = shzPostText(article);
+  if (!id || !text) return; // 画像だけの投稿は本文が無いので残さない
+  const key = await shzHashId(id);
+  if (shzSeen.has(key)) return;
+  shzSeen.add(key);
+  shzQueue[`rec:${key}`] = { text, feed, ts: Date.now() };
+  clearTimeout(shzFlushTimer);
+  shzFlushTimer = setTimeout(shzFlush, SHZ_FLUSH_MS);
+}
+
+function shzFlush() {
+  const batch = { ...shzQueue };
+  for (const k of Object.keys(shzQueue)) delete shzQueue[k];
+  if (Object.keys(batch).length) chrome.storage.local.set(batch);
+}
+
+function shzWatchArticle(article) {
+  if (article.dataset.shizumeWatched) return;
+  article.dataset.shizumeWatched = "1";
+  shzObserver.observe(article);
+}
+
+function shzScanArticles(root) {
+  for (const a of root.querySelectorAll(X_DOM.post)) shzWatchArticle(a);
+}
+
+function shzStartRecording() {
+  if (shzObserver) return;
+  shzObserver = new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      clearTimeout(shzTimers.get(e.target));
+      if (e.isIntersecting && e.intersectionRatio >= SHZ_RATIO) shzTimers.set(e.target, setTimeout(() => shzCapture(e.target), SHZ_DWELL_MS));
+    }
+  }, { threshold: [0, SHZ_RATIO] });
+  let pending = false;
+  shzMutation = new MutationObserver(() => {
+    if (pending) return;
+    pending = true;
+    requestAnimationFrame(() => { pending = false; shzScanArticles(document); });
+  });
+  shzMutation.observe(document.body, { childList: true, subtree: true });
+  shzScanArticles(document);
+}
+
+function shzStopRecording() {
+  shzObserver?.disconnect();
+  shzMutation?.disconnect();
+  shzObserver = shzMutation = null;
+  clearTimeout(shzFlushTimer);
+  for (const k of Object.keys(shzQueue)) delete shzQueue[k]; // 保存待ちも捨てる（オフにしたら残さない）
+  for (const a of document.querySelectorAll("[data-shizume-watched]")) delete a.dataset.shizumeWatched;
+}
+
+// オンにしたとき: 古い記録を消し、保存済みの印を覚えて、見張りを始める
+async function shzTurnOn() {
+  const all = await chrome.storage.local.get(null);
+  const recs = Object.fromEntries(Object.entries(all).filter(([k]) => k.startsWith("rec:")));
+  const old = shzPurgeKeys(recs, Date.now(), SHZ_KEEP_DAYS);
+  if (old.length) await chrome.storage.local.remove(old);
+  for (const k of Object.keys(recs)) if (!old.includes(k)) shzSeen.add(k.slice(4));
+  shzRecOn = true;
+  shzStartRecording();
+}
+
+chrome.storage.local.get({ recordEnabled: false }, (v) => { if (v.recordEnabled === true) shzTurnOn(); });
+chrome.storage.onChanged.addListener((c, area) => {
+  if (area !== "local" || !c.recordEnabled) return;
+  if (c.recordEnabled.newValue === true) shzTurnOn();
+  else { shzRecOn = false; shzStopRecording(); }
+});

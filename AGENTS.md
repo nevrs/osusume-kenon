@@ -4,8 +4,8 @@ X（x.com）だけで動く Chrome 拡張。X の「おすすめ」が炎上と�
 
 ## 動かし方
 
-- テスト: `node --test test/x-dom.test.js test/judge.test.js`（ディレクトリを渡すと Node 22 では失敗する）
-- 一呼吸の流れ（模擬 DOM）: `node tools/pause-harness.js . <jsdom を入れた node_modules>`
+- テスト: `node --test test/x-dom.test.js test/judge.test.js test/record-core.test.js`（ディレクトリを渡すと Node 22 では失敗する）
+- 一呼吸・記録の流れ（模擬 DOM）: `node tools/pause-harness.js . <jsdom を入れた node_modules>`、`node tools/record-harness.js . <同>`
 - 拡張: chrome://extensions →「パッケージ化されていない拡張機能を読み込む」でこのフォルダ
 
 ## 守ること
@@ -16,4 +16,5 @@ X（x.com）だけで動く Chrome 拡張。X の「おすすめ」が炎上と�
 - **流用してよいコード:** attention-vaccine（nevrs/attention-vaccine、同じ作者、MIT。写したら同期しない: DESIGN.md D4）と Apache-2.0 の x-algorithm。
   bouncer（AGPL）・FeedMonitor（ライセンス無し）は読むだけで、コードを写さない
 - 投稿の本文を外部へ送る機能は、送り先と送る条件を設定画面と README に書く
+- 記録（record.js）は、投稿者名・リンク・元の ID を残さない。オフが初期値（DESIGN.md D9）
 - 利用者に見える文言は日本語（平易に。専門用語は言い換える）

@@ -19,7 +19,16 @@
     下書きは端末の外に出ず、保存もしません。判定は誤ることがあります。組み込み AI が使えない端末では何もしません。</p>
   <p class="note">オフのあいだは、下書きを読むことも判定することもしません。</p>
 </section>
+<section>
+  <label><input type="checkbox" id="recordEnabled"> <span><strong>見せられた投稿の記録</strong>（初期値はオフ）</span></label>
+  <p class="note">オンにすると、X の「おすすめ」「フォロー中」で、画面に 1 秒以上出ていた投稿の本文を、この端末の中にだけ残します。
+    あとで「怒りや敵意の強い投稿がどれだけ流れてきたか」を調べるためのものです。
+    残すのは、投稿の印（元の ID から作った短い文字列）・本文・「おすすめ」か「フォロー中」か・時刻だけで、投稿者名やリンクは残しません。
+    X へは何も送らず、画面のスクロールもしません。14 日たった記録は自動で消えます。</p>
+  <p class="note">いま残っている記録: <span id="recCount">…</span>　<button type="button" id="recDelete">すべて消す</button></p>
+</section>
 <p id="saved" class="note" aria-live="polite"></p>
+<script src="record-core.js"></script>
 <script src="options.js"></script>
 </body>
 </html>
