@@ -55,7 +55,7 @@ function parseActionLabel(label) {
 function countsOf(label, lang) {
   const c = parseActionLabel(label);
   if (!c) return null;
-  if (/^ja/.test(lang || "")) for (const k of Object.keys(c)) c[k] ??= 0;
+  if (/^ja\b/.test(lang || "")) for (const k of Object.keys(c)) c[k] ??= 0;
   return c;
 }
 
