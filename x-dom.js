@@ -1,12 +1,14 @@
 // X の画面の部品の場所と、そこから数を読む関数。
 // 投稿・本文・引用の場所は attention-vaccine の sites.js（30496cd、2026-09-28・10-09 に実機で確認）から写した。
-// 数の読み方は未確認（SESSION.md の次の一手で、実機の X で確かめる）。
+// 数の読み方は、日本語のおすすめ 45 件で確認（2026-10-20、test/fixtures/ja-home-2026-10-20.json）:
+//   どの投稿にも数の行がちょうど1つ。数は省略しない正確な値。0 件の種類は文から省く。引用の枠の中に数の行は無い。
+//   X は画面の外に出た投稿の要素を消す（画面にある投稿は常に 6 件前後）。英語の画面は未確認
 
 const X_DOM = {
   post: 'article[data-testid="tweet"]',
   text: '[data-testid="tweetText"]',
   quote: 'div[role="link"]', // 引用された投稿の外枠
-  // 返信・リポスト・いいね・ブックマーク・表示の数を、まとめて読み上げ用の文に持つ行（推測。未確認）
+  // 返信・リポスト・いいね・ブックマーク・表示の数を、まとめて読み上げ用の文に持つ行
   actionBar: '[role="group"][aria-label]',
 };
 
@@ -28,7 +30,7 @@ const COUNT_KINDS = [
 ];
 
 // 行の読み上げ用の文（例「3 件の返信、5 件のリポスト、20 件のいいね」「3 replies, 5 reposts, 20 likes」）から数を取る。
-// 文に出てこない種類は null（0 件なのか読めなかったのかを分けるため。X が 0 件の種類を読み上げないかは未確認）。
+// 文に出てこない種類は null（読めなかったのか 0 件なのかを、ここでは決めない。0 とみなすのは countsOf）。
 // 数→語の順を前提にしている（「Replies: 3」のような語→数の順は取り違える。未確認）
 function parseActionLabel(label) {
   const counts = { replies: null, reposts: null, likes: null, bookmarks: null, views: null };
@@ -46,6 +48,14 @@ function parseActionLabel(label) {
   return found ? counts : null;
 }
 
+// 数の行の文から数を取り、文に無い種類を 0 とする（日本語では 0 件の種類を省くと確認済み。英語は未確認）
+function countsOf(label) {
+  const c = parseActionLabel(label);
+  if (!c) return null;
+  for (const k of Object.keys(c)) c[k] ??= 0;
+  return c;
+}
+
 // 投稿の数の行の文（読み上げ用）を返す。引用の枠の中の行は使わない。無ければ null
 function countLabel(post) {
   for (const bar of post.querySelectorAll(X_DOM.actionBar)) {
@@ -57,4 +67,4 @@ function countLabel(post) {
   return null;
 }
 
-if (typeof module !== "undefined") module.exports = { X_DOM, parseCount, parseActionLabel };
+if (typeof module !== "undefined") module.exports = { X_DOM, parseCount, parseActionLabel, countsOf };

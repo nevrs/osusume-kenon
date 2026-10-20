@@ -1,7 +1,8 @@
 // node --test test/x-dom.test.js
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { parseCount, parseActionLabel } = require("../x-dom.js");
+const { parseCount, parseActionLabel, countsOf } = require("../x-dom.js");
+const fixture = require("./fixtures/ja-home-2026-10-20.json");
 
 test("parseCount", () => {
   assert.equal(parseCount("1,234"), 1234);
@@ -36,4 +37,13 @@ test("parseActionLabel: bookmarks の b を単位と読まない、単位付き�
 test("parseActionLabel: 数の無い文は null", () => {
   assert.equal(parseActionLabel("返信する"), null);
   assert.equal(parseActionLabel(null), null);
+});
+
+test("実機の X（日本語のおすすめ 45 件）: すべて読め、返信数が返信ボタンの数と一致する", () => {
+  for (const { label, replyButton } of fixture.rows) {
+    const c = countsOf(label);
+    assert.ok(c, label);
+    assert.equal(c.replies, replyButton, label);
+    assert.ok(c.views > 0, label);
+  }
 });
