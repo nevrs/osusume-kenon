@@ -1,0 +1,545 @@
+{
+"note": "Chrome 155 の組み込み AI（Prompt API）で、attention-vaccine の例文（tools/eval/cases.json・critique.json、30496cd）を判定した結果。1 回ずつ。問いの文は attention-vaccine の techniques.js の flame・dehuman。2026-10-20",
+"create_ms": {
+"flame": 10716,
+"dehuman": 1272
+},
+"items": [
+{
+"id": "disc-flame1-base",
+"q": "flame",
+"expect": 1,
+"score": 95,
+"ms": 1627,
+"set": "cases.json"
+},
+{
+"id": "disc-flame1-pre-nobait",
+"q": "flame",
+"expect": 1,
+"score": 95,
+"ms": 1090,
+"set": "cases.json"
+},
+{
+"id": "disc-flame1-suf-fact",
+"q": "flame",
+"expect": 1,
+"score": 90,
+"ms": 1024,
+"set": "cases.json"
+},
+{
+"id": "disc-flame1-suf-nolure",
+"q": "flame",
+"expect": 1,
+"score": 95,
+"ms": 1041,
+"set": "cases.json"
+},
+{
+"id": "disc-flame1-suf-en",
+"q": "flame",
+"expect": 1,
+"score": 95,
+"ms": 1022,
+"set": "cases.json"
+},
+{
+"id": "disc-flame2-base",
+"q": "flame",
+"expect": 1,
+"score": 95,
+"ms": 1193,
+"set": "cases.json"
+},
+{
+"id": "disc-flame2-pre-nobait",
+"q": "flame",
+"expect": 1,
+"score": 95,
+"ms": 1137,
+"set": "cases.json"
+},
+{
+"id": "disc-flame2-suf-fact",
+"q": "flame",
+"expect": 1,
+"score": 95,
+"ms": 1109,
+"set": "cases.json"
+},
+{
+"id": "disc-flame2-suf-nolure",
+"q": "flame",
+"expect": 1,
+"score": 95,
+"ms": 1088,
+"set": "cases.json"
+},
+{
+"id": "disc-flame2-suf-en",
+"q": "flame",
+"expect": 1,
+"score": 95,
+"ms": 1095,
+"set": "cases.json"
+},
+{
+"id": "demo-post-2",
+"q": "flame",
+"expect": 1,
+"score": 75,
+"ms": 984,
+"set": "cases.json"
+},
+{
+"id": "sym-flame-gov-L",
+"q": "flame",
+"expect": 0,
+"score": 40,
+"ms": 1100,
+"set": "cases.json"
+},
+{
+"id": "sym-flame-gov-R",
+"q": "flame",
+"expect": 0,
+"score": 35,
+"ms": 1102,
+"set": "cases.json"
+},
+{
+"id": "sym-flame-policy-L",
+"q": "flame",
+"expect": 0,
+"score": 20,
+"ms": 982,
+"set": "cases.json"
+},
+{
+"id": "sym-flame-policy-R",
+"q": "flame",
+"expect": 0,
+"score": 20,
+"ms": 1113,
+"set": "cases.json"
+},
+{
+"id": "sym-flame-rl-L",
+"q": "flame",
+"expect": 0,
+"score": 20,
+"ms": 1029,
+"set": "cases.json"
+},
+{
+"id": "sym-flame-rl-R",
+"q": "flame",
+"expect": 0,
+"score": 75,
+"ms": 1180,
+"set": "cases.json"
+},
+{
+"id": "sym-flame-harsh-L",
+"q": "flame",
+"expect": 0,
+"score": 60,
+"ms": 1033,
+"set": "cases.json"
+},
+{
+"id": "sym-flame-harsh-R",
+"q": "flame",
+"expect": 0,
+"score": 40,
+"ms": 1034,
+"set": "cases.json"
+},
+{
+"id": "demo-post-1",
+"q": "flame",
+"expect": 0,
+"score": 10,
+"ms": 955,
+"set": "cases.json"
+},
+{
+"id": "demo-post-3",
+"q": "flame",
+"expect": 0,
+"score": 10,
+"ms": 982,
+"set": "cases.json"
+},
+{
+"id": "demo-post-5",
+"q": "flame",
+"expect": 0,
+"score": 10,
+"ms": 984,
+"set": "cases.json"
+},
+{
+"id": "dehuman-D01",
+"q": "dehuman",
+"expect": 1,
+"score": 100,
+"ms": 1154,
+"set": "cases.json"
+},
+{
+"id": "dehuman-D02",
+"q": "dehuman",
+"expect": 1,
+"score": 95,
+"ms": 981,
+"set": "cases.json"
+},
+{
+"id": "dehuman-D03",
+"q": "dehuman",
+"expect": 1,
+"score": 90,
+"ms": 1008,
+"set": "cases.json"
+},
+{
+"id": "dehuman-D04",
+"q": "dehuman",
+"expect": 1,
+"score": 85,
+"ms": 947,
+"set": "cases.json"
+},
+{
+"id": "dehuman-D05",
+"q": "dehuman",
+"expect": 1,
+"score": 100,
+"ms": 1035,
+"set": "cases.json"
+},
+{
+"id": "dehuman-D06",
+"q": "dehuman",
+"expect": 1,
+"score": 75,
+"ms": 981,
+"set": "cases.json"
+},
+{
+"id": "dehuman-D07",
+"q": "dehuman",
+"expect": 1,
+"score": 95,
+"ms": 981,
+"set": "cases.json"
+},
+{
+"id": "dehuman-D08",
+"q": "dehuman",
+"expect": 1,
+"score": 100,
+"ms": 1010,
+"set": "cases.json"
+},
+{
+"id": "dehuman-D09",
+"q": "dehuman",
+"expect": 1,
+"score": 100,
+"ms": 1064,
+"set": "cases.json"
+},
+{
+"id": "dehuman-D11",
+"q": "dehuman",
+"expect": 1,
+"score": 90,
+"ms": 980,
+"set": "cases.json"
+},
+{
+"id": "dehuman-D13",
+"q": "dehuman",
+"expect": 1,
+"score": 95,
+"ms": 982,
+"set": "cases.json"
+},
+{
+"id": "dehuman-D15",
+"q": "dehuman",
+"expect": 1,
+"score": 100,
+"ms": 1044,
+"set": "cases.json"
+},
+{
+"id": "dehuman-D16",
+"q": "dehuman",
+"expect": 1,
+"score": 95,
+"ms": 974,
+"set": "cases.json"
+},
+{
+"id": "dehuman-D17",
+"q": "dehuman",
+"expect": 1,
+"score": 95,
+"ms": 949,
+"set": "cases.json"
+},
+{
+"id": "dehuman-D18",
+"q": "dehuman",
+"expect": 1,
+"score": 95,
+"ms": 950,
+"set": "cases.json"
+},
+{
+"id": "dehuman-D10",
+"q": "dehuman",
+"expect": 0,
+"score": 100,
+"ms": 1006,
+"set": "cases.json"
+},
+{
+"id": "dehuman-D12",
+"q": "dehuman",
+"expect": 0,
+"score": 85,
+"ms": 947,
+"set": "cases.json"
+},
+{
+"id": "dehuman-D14",
+"q": "dehuman",
+"expect": 0,
+"score": 95,
+"ms": 981,
+"set": "cases.json"
+},
+{
+"id": "dehuman-B06",
+"q": "dehuman",
+"expect": 0,
+"score": 90,
+"ms": 954,
+"set": "cases.json"
+},
+{
+"id": "dehuman-E01",
+"q": "dehuman",
+"expect": 0,
+"score": 30,
+"ms": 1123,
+"set": "cases.json"
+},
+{
+"id": "dehuman-E02",
+"q": "dehuman",
+"expect": 0,
+"score": 10,
+"ms": 1014,
+"set": "cases.json"
+},
+{
+"id": "dehuman-E03",
+"q": "dehuman",
+"expect": 0,
+"score": 10,
+"ms": 966,
+"set": "cases.json"
+},
+{
+"id": "dehuman-E04",
+"q": "dehuman",
+"expect": 0,
+"score": 20,
+"ms": 975,
+"set": "cases.json"
+},
+{
+"id": "dehuman-E05",
+"q": "dehuman",
+"expect": 0,
+"score": 0,
+"ms": 892,
+"set": "cases.json"
+},
+{
+"id": "dehuman-E06",
+"q": "dehuman",
+"expect": 0,
+"score": 0,
+"ms": 928,
+"set": "cases.json"
+},
+{
+"id": "dehuman-E07",
+"q": "dehuman",
+"expect": 0,
+"score": 0,
+"ms": 894,
+"set": "cases.json"
+},
+{
+"id": "dehuman-E08",
+"q": "dehuman",
+"expect": 0,
+"score": 100,
+"ms": 1048,
+"set": "cases.json"
+},
+{
+"id": "dehuman-E09",
+"q": "dehuman",
+"expect": 0,
+"score": 70,
+"ms": 956,
+"set": "cases.json"
+},
+{
+"id": "dehuman-E10",
+"q": "dehuman",
+"expect": 0,
+"score": 100,
+"ms": 1143,
+"set": "cases.json"
+},
+{
+"id": "dehuman-E11",
+"q": "dehuman",
+"expect": 0,
+"score": 20,
+"ms": 979,
+"set": "cases.json"
+},
+{
+"id": "L01",
+"q": "flame",
+"expect": 0,
+"score": 25,
+"ms": 1125,
+"set": "critique.json legit"
+},
+{
+"id": "L02",
+"q": "flame",
+"expect": 0,
+"score": 90,
+"ms": 1088,
+"set": "critique.json legit"
+},
+{
+"id": "L03",
+"q": "flame",
+"expect": 0,
+"score": 85,
+"ms": 997,
+"set": "critique.json legit"
+},
+{
+"id": "L04",
+"q": "flame",
+"expect": 0,
+"score": 60,
+"ms": 1133,
+"set": "critique.json legit"
+},
+{
+"id": "L05",
+"q": "flame",
+"expect": 0,
+"score": 90,
+"ms": 1084,
+"set": "critique.json legit"
+},
+{
+"id": "L06",
+"q": "flame",
+"expect": 0,
+"score": 45,
+"ms": 1097,
+"set": "critique.json legit"
+},
+{
+"id": "L07",
+"q": "flame",
+"expect": 0,
+"score": 90,
+"ms": 1080,
+"set": "critique.json legit"
+},
+{
+"id": "L08",
+"q": "flame",
+"expect": 0,
+"score": 85,
+"ms": 1089,
+"set": "critique.json legit"
+},
+{
+"id": "L09",
+"q": "flame",
+"expect": 0,
+"score": 75,
+"ms": 1091,
+"set": "critique.json legit"
+},
+{
+"id": "L10",
+"q": "flame",
+"expect": 0,
+"score": 10,
+"ms": 1085,
+"set": "critique.json legit"
+},
+{
+"id": "L11",
+"q": "flame",
+"expect": 0,
+"score": 85,
+"ms": 1112,
+"set": "critique.json legit"
+},
+{
+"id": "L12",
+"q": "flame",
+"expect": 0,
+"score": 95,
+"ms": 1155,
+"set": "critique.json legit"
+},
+{
+"id": "L13",
+"q": "flame",
+"expect": 0,
+"score": 95,
+"ms": 1121,
+"set": "critique.json legit"
+},
+{
+"id": "L14",
+"q": "flame",
+"expect": 0,
+"score": 10,
+"ms": 1141,
+"set": "critique.json legit"
+},
+{
+"id": "L15",
+"q": "flame",
+"expect": 0,
+"score": 90,
+"ms": 1165,
+"set": "critique.json legit"
+}
+]
+}
