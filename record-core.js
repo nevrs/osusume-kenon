@@ -25,7 +25,7 @@ function shzPostText(article) {
 const SHZ_AD_LABELS = new Set(["広告", "Ad", "Promoted", "プロモーション"]);
 function shzIsAd(article) {
   for (const s of article.querySelectorAll("span")) {
-    if (s.closest(X_DOM.text) || s.closest(X_DOM.quote)) continue;
+    if (s.closest(X_DOM.text) || s.closest(X_DOM.quote) || s.closest('[data-testid="User-Name"]')) continue; // 表示名が「Ad」の人を広告と誤らない
     if (SHZ_AD_LABELS.has((s.textContent || "").trim())) return true;
   }
   return false;
@@ -41,7 +41,8 @@ function shzFeedOf(doc, pathname) {
   return null;
 }
 
-// ID を端末の中だけで使う短い印にする（保存した記録から X の投稿をたどりにくくする）。同じ ID は同じ印になる
+// ID から短い印を作る（同じ投稿の二重記録を見分けるため）。秘密の値を混ぜていないので、候補の ID を持つ人なら照合できる。
+// 元の投稿を隠す働きは期待しない（本文そのものから、X で検索すれば投稿はたどれる）
 async function shzHashId(id) {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`shizume:${id}`));
   return [...new Uint8Array(buf)].slice(0, 8).map((b) => b.toString(16).padStart(2, "0")).join("");

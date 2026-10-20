@@ -24,6 +24,7 @@ const page = (tab) => `<body>
     ${article("444", null)}
     ${article("555", "すぐ画面から出る投稿")}
     ${article("666", "保存済みの投稿")}
+    ${article("777", "表示名が Ad の人の投稿").replace('<a href="/someone">名前</a>', '<span>Ad</span>')}
   </div>
 </body>`;
 
@@ -31,6 +32,7 @@ function setup({ url = "https://x.com/home", tab = "おすすめ", stored = {}, 
   const dom = new JSDOM(page(tab), { url, runScripts: "outside-only", pretendToBeVisual: true });
   const w = dom.window;
   const store = { ...stored };
+  const writes = {}; // キーごとの書き込み回数
   if (enabled) store.recordEnabled = true;
   const listeners = [];
   const ios = [];
@@ -44,7 +46,7 @@ function setup({ url = "https://x.com/home", tab = "おすすめ", stored = {}, 
         if (cb) { setTimeout(() => cb(res), 20); return undefined; }
         return Promise.resolve(res);
       },
-      set: (o, cb) => { Object.assign(store, o); cb?.(); return Promise.resolve(); },
+      set: (o, cb) => { for (const k of Object.keys(o)) writes[k] = (writes[k] || 0) + 1; Object.assign(store, o); cb?.(); return Promise.resolve(); },
       remove: (keys) => { for (const k of [].concat(keys)) delete store[k]; return Promise.resolve(); },
     },
     onChanged: { addListener: (f) => listeners.push(f) },
@@ -54,8 +56,9 @@ function setup({ url = "https://x.com/home", tab = "おすすめ", stored = {}, 
   const art = (id) => [...d.querySelectorAll("article")].find((a) => a.querySelector(`a[href$="/status/${id}"]`));
   const see = (id, ratio = 0.8) => { for (const io of ios) if (io.observed.has(art(id))) io.cb([{ target: art(id), isIntersecting: ratio > 0, intersectionRatio: ratio }]); };
   const setEnabled = (v) => { store.recordEnabled = v; for (const f of listeners) f({ recordEnabled: { newValue: v } }, "local"); };
+  const clearAll = () => { for (const k of Object.keys(store)) if (k.startsWith("rec:")) delete store[k]; store.recordClearedAt = Date.now(); for (const f of listeners) f({ recordClearedAt: { newValue: store.recordClearedAt } }, "local"); };
   const recs = () => Object.fromEntries(Object.entries(store).filter(([k]) => k.startsWith("rec:")));
-  return { w, d, store, ios, art, see, setEnabled, recs };
+  return { w, d, store, ios, art, see, setEnabled, clearAll, recs, writes };
 }
 
 const results = [];
@@ -73,12 +76,15 @@ const check = (name, ok) => results.push(`${ok ? "OK" : "NG"}  ${name}`);
   // オン
   t = setup({ stored: { [`rec:${hashOf("666")}`]: { text: "保存済みの投稿", feed: "for-you", ts: Date.now() - DAY }, "rec:old": { text: "古い", feed: "for-you", ts: Date.now() - 20 * DAY } }, enabled: true });
   await wait(150);
-  check("オンなら見張りを始める", t.ios.length === 1 && t.ios[0].observed.size === 6);
+  check("オンなら見張りを始める", t.ios.length === 1 && t.ios[0].observed.size === 7);
   check("オンにしたとき、14 日より古い記録を消す", !("rec:old" in t.store) && `rec:${hashOf("666")}` in t.store);
   for (const id of ["111", "222", "333", "444", "666"]) t.see(id);
   t.see("111"); // 同じ投稿をもう一度
   t.see("555"); await wait(500); t.see("555", 0); // 1 秒たつ前に画面から出る
+  const ts666 = t.store[`rec:${hashOf("666")}`].ts;
   await wait(5600);
+  t.see("111"); t.see("666"); t.see("777"); // 保存したあとで、同じ投稿をもう一度見る（777 は初めて）
+  await wait(5300);
   const r = t.recs();
   const get = (id) => r[`rec:${hashOf(id)}`];
   check("見えていた投稿の本文・おすすめ・時刻を残す", get("111")?.text === "怒っている投稿です" && get("111")?.feed === "for-you" && typeof get("111")?.ts === "number");
@@ -87,7 +93,10 @@ const check = (name, ok) => results.push(`${ok ? "OK" : "NG"}  ${name}`);
   check("広告は残さない", !get("333"));
   check("本文の無い投稿（画像だけ）は残さない", !get("444"));
   check("1 秒たつ前に画面から出た投稿は残さない", !get("555"));
-  check("同じ投稿は二重に残さない（保存済みも）", Object.keys(r).filter((k) => get("111") && r[k] === get("111")).length === 1 && Object.keys(r).length === 3);
+  check("保存したあとで同じ投稿をもう一度見ても、書き直さない", t.writes[`rec:${hashOf("111")}`] === 1);
+  check("前に保存済みの投稿は、見ても時刻を書き換えない", get("666")?.ts === ts666 && !t.writes[`rec:${hashOf("666")}`]);
+  check("表示名が「Ad」の人の投稿は、広告とみなさず残す", get("777")?.text === "表示名が Ad の人の投稿");
+  check("X のページから見える印（data-shizume-*）を付けない", ![...t.d.querySelectorAll("*")].some((el) => [...el.attributes].some((a) => a.name.startsWith("data-shizume"))));
 
   // フォロー中・別のページ
   t = setup({ tab: "フォロー中", enabled: true });
@@ -116,6 +125,41 @@ const check = (name, ok) => results.push(`${ok ? "OK" : "NG"}  ${name}`);
   await wait(5300);
   const again = Object.values(t.recs()).map((x) => x.text);
   check("オンにし直したあと、オフ前の保存待ちが書き込まれない", again.length === 1 && again[0] === "自分の本文");
+
+  t = setup({ stored: { "rec:old": { text: "古い", feed: "for-you", ts: Date.now() - 20 * DAY } } });
+  await wait(150);
+  check("オフのままでも、X のページを開いたとき期限の過ぎた記録を消す", !("rec:old" in t.store));
+
+  t = setup({ enabled: true });
+  await wait(150);
+  t.see("111");
+  await wait(1300); // 見たと判定されたが、まだ保存していない
+  t.clearAll(); // 設定画面の「すべて消す」
+  await wait(4500);
+  check("「すべて消す」のあと、開いているタブの保存待ちが書き戻されない", Object.keys(t.recs()).length === 0);
+  t.see("111");
+  await wait(5300);
+  check("「すべて消す」のあと、同じ投稿をまた見たら記録できる（記録済みの覚えも捨てた）", Object.keys(t.recs()).length === 1);
+
+  t = setup({ enabled: false });
+  await wait(100);
+  t.setEnabled(true);
+  t.setEnabled(false); // 準備の途中でオフ
+  await wait(200);
+  t.see("111");
+  await wait(5300);
+  check("オンの準備中にオフにしたら、記録を始めない", t.ios.every((io) => io.dead || io.observed.size === 0) && Object.keys(t.recs()).length === 0);
+
+  t = setup({ enabled: true });
+  await wait(150);
+  t.see("111");
+  await wait(1300);
+  t.setEnabled(false);
+  t.setEnabled(true);
+  await wait(150);
+  t.see("111");
+  await wait(5300);
+  check("オフで捨てた投稿も、オンに戻したあとに見れば記録できる", t.recs()[`rec:${hashOf("111")}`]?.text === "怒っている投稿です");
 
   console.log(results.join("\n"));
   process.exit(results.some((x) => x.startsWith("NG")) ? 1 : 0);
