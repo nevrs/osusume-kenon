@@ -24,12 +24,22 @@ const groups = {
   "告発・批判 本人の体験": (r) => r.set === "告発・批判" && r.src === "self",
   "左右の組（追加）": (r) => r.set === "左右の組（追加）",
 };
-// 「部品の規則」: max(集団をけなす, 反応を誘う) ≥ 70 かつ 具体的な批判 < 50 かつ 本人の訴え < 50
-const rule = (v) => (r) => Math.max(r.get(`${v}_group`), r.get(`${v}_bait`)) >= 70 && r.get(`${v}_specific`) < 50 && r.get(`${v}_self`) < 50;
+// 「部品の規則」: 挑発（各回の max(集団をけなす, 反応を誘う) の 3 回平均）≥ 70 かつ 具体的な批判（3 回平均）< 50 かつ 本人の訴え（3 回平均）< 50
+const rule = (v) => (r) => r.get(`${v}_flame`) >= 70 && r.get(`${v}_specific`) < 50 && r.get(`${v}_self`) < 50;
 const judges = { A: (r) => r.get("A_flame") >= 70, B: (r) => r.get("B_flame") >= 70, C: (r) => r.get("C_flame") >= 70, "B＋規則": rule("B"), "C＋規則": rule("C") };
 
 console.log(`グループ | 本数 | ${Object.keys(judges).join(" | ")}（印が付いた本数、基準 70）`);
 for (const [g, f] of Object.entries(groups)) {
   const rs = rows.filter(f);
   console.log(`${g} | ${rs.length} | ${Object.values(judges).map((j) => rs.filter(j).length).join(" | ")}`);
+}
+
+// 左右の組（書き手が左 = L、右 = R。対象を入れ替えただけの文）: 右・与党を批判する側（L）と、左・野党を批判する側（R）の差の向き
+const lr = [["sym-flame-gov-L", "sym-flame-gov-R"], ["sym-flame-policy-L", "sym-flame-policy-R"], ["sym-flame-rl-L", "sym-flame-rl-R"],
+  ["sym-flame-harsh-L", "sym-flame-harsh-R"], ["P1L", "P1R"], ["P2L", "P2R"], ["P3L", "P3R"], ["P4L", "P4R"], ["P5L", "P5R"]];
+const byId = Object.fromEntries(rows.map((r) => [r.id, r]));
+console.log("\n左右の組 9 組 | 左・野党を批判する側が高い | 低い | 同点");
+for (const v of ["A", "B", "C"]) {
+  const d = lr.map(([l, r]) => byId[r].get(`${v}_flame`) - byId[l].get(`${v}_flame`));
+  console.log(`${v} | ${d.filter((x) => x > 0).length} | ${d.filter((x) => x < 0).length} | ${d.filter((x) => x === 0).length}`);
 }
