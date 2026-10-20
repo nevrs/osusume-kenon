@@ -16,7 +16,7 @@ Phoenix（Grok 由来の予測モデル）が「この人がこの投稿に各�
 
 この後に次の調整が入る（`xai-value-model/scoring.rs`、X の README の Scoring and Ranking）:
 負の点数のずらし（`offset_score`）、フォローしていない人の投稿の割引、同じ作者が続くときの減点、
-表示の少ない作者の押し上げ。最後に `vm-ranker/` が、似た投稿が並ばないよう並べ直す。
+表示の少ない作者の押し上げ。最後に `vm-ranker/` が点数を計算し直す（9 の DPP が有効なら、似た投稿を外して候補を絞る）。
 
 ### 重みは2か所にあり、初期値が少し違う
 
@@ -71,17 +71,24 @@ Phoenix（Grok 由来の予測モデル）が「この人がこの投稿に各�
 7. **投稿の埋め込み（似た投稿を探すための数値）の一つは「話題・感情・関心の集まり」で探すよう指示されている**
    （`grox/flows/mm_emb/embedder.py` の V5）。並行する V8.2 などの指示文は「話題・意図・主な固有名・反応されやすさ」で、感情を含まない。どれが使われているかは未確認
 
-8. **点数を予測するときに読む本人の行動の履歴は、直近の最大 1024 件**（`home-mixer/params/param.rs` の `MaxSeqLengthScoring` 1024、取り出し側の `MaxSeqLengthRetrieval` も 1024。
-   `home-mixer/query_hydrators/scoring_sequence_query_hydrator.rs` が履歴を取ってくる）。区切りは日数ではなく件数と読める（推測。どの行動が 1 件に数えられるかは集計の種類 `DenseWithFavVqvCleaned` しだいで、中身は未読）。
-   読み: 怒りの返信や炎上した投稿への反応をやめても、それが予測から消えるのは、その後の行動で 1024 件分押し出されたとき（推測）。たくさん使う人ほど早く入れ替わる。
-   話題を 28 日分集める仕組み（`HistoryTopicsWindowDays` 28）もあるが、既定では使われていない（`HistoryTopicsEnabled` false）
-9. **似た投稿が並ばないよう、点数上位 150 件を選び直す**（`vm-ranker/dpp.rs`、`vm-ranker/params.rs` の `DppEnabled` true・`DppTheta` 0.65・`DppMaxSelectedRank` 150）。
-   似ているかどうかは投稿の埋め込み（`vm-ranker/embedding_store.rs` の mm 埋め込み）で測る。どの版の埋め込みかはこのリポでは確かめられなかった。
-   7 の V5（「話題・感情・関心の集まり」で似た投稿を探す）が使われているなら、同じ感情の投稿が続くのを避ける向きに働く（推測）。選び直しは点数を少し捨てる代わりに似た投稿を離すもので、対立する投稿を下げる仕組みではない
+8. **点数を予測するときに読む本人の行動の履歴には、上限がある（約 1000 件）。** 集計サービスへの要求の上限は 1024（`home-mixer/params/param.rs` の `MaxSeqLengthScoring`、取り出し側の `MaxSeqLengthRetrieval` も 1024）、
+   予測モデルが読む履歴の長さは 1022（`phoenix/README.md`、`phoenix/xrex/configs/xrecsys.py`）。履歴を取ってくるのは `home-mixer/query_hydrators/scoring_sequence_query_hydrator.rs`、集計の種類の既定は `DENSE_WITH_LONG_DWELL`（`PhoenixAggregationType`）。
+   要求には時間の値 `window_time_ms`（5 分、`home-mixer/params/config.rs` の `UAS_WINDOW_TIME_MS`）も渡している。1 件が生の行動 1 回なのか、新しい順に切るのか、古い行動を日数で落とすのかは、リポの外の集計サービスにあって分からない。
+   読み（推測）: 新しい順に約 1000 件なら、怒りの返信や炎上した投稿への反応をやめても、それが予測から消えるのは、その後の行動で押し出されたとき。たくさん使う人ほど早く入れ替わる。
+   話題を 28 日分に絞る仕組み（取り出し済みの履歴を時刻で絞るもの。`HistoryTopicsWindowDays` 28）もあるが、既定では使われていない（`HistoryTopicsEnabled` false、vm-ranker への送信も `VMRankerSendHistoryTopics` false）
+9. **DPP（似た投稿を外して候補を絞る処理）**（`vm-ranker/dpp.rs`・`vm-ranker/scoring/dpp_model.rs`）:
+   点数上位 `max_selected_rank` 件の中から、似ていない組み合わせになるよう最大 `top_k` 件を選ぶ。選ばれた投稿は元の点数のまま残り、**選ばれなかった投稿と、上位から外れた投稿は点数が 0 になる**（ログの文言も「DPP filtered … Dropped」）。並び順を入れ替える処理ではない。
+   - 設定: home-mixer 側の既定は `DppEnabled` true・`DppTheta` 0.65・`DppMaxSelectedRank` 150（`vm-ranker/params.rs`）。一方、サービスの起動引数 `--dpp-enabled` の既定は false で、false なら DPP は準備されず動かない（`vm-ranker/args.rs`・`main.rs`）。
+     設定が解決できないときは起動引数の既定（theta 0.5・上位 100）。`top_k` は起動引数 `--dpp-top-k`（既定 50）で、home-mixer は送っていない。本番の起動引数はリポに無いので、**本番で DPP が動いているか、何件残すかは分からない**
+   - theta は点数をどれだけ重く見るか（alpha = θ / (2(1−θ))、0.65 で約 0.93）。大きいほど点数を重く見て、似た投稿を外す力は弱い。「話題」系の要求では既定で切られる（`TopicDppEnabled` false）
+   - 似ているかは投稿の mm 埋め込みで測る（`vm-ranker/embedding_store.rs`）。版は環境変数で決まり、このリポでは分からない。7 の V5（「話題・感情・関心の集まり」）なら、同じ感情の投稿が並ぶのを減らす向きに働く（推測）。埋め込みの無い投稿は乱数のベクトルを当てられ、他と似ていない扱いで残りやすい
+   - 対立する投稿を下げる仕組みではない
+10. **共有の人気投稿の一覧**（`home-mixer/util/popular_posts.rs`・`home-mixer/popular_posts_job.rs`、読み込みは `home-mixer/sources/popular_posts_source.rs`）: 24 時間以内の投稿を、**表示数**と経過時間（半減期 8 時間）から出した値で選ぶ。1 作者 5 件まで、全体で 500 件。
+    いいね・返信などの反応の数は使わない。読み（推測）: 見られた数だけで選ぶので、炎上して多く見られた投稿もそのまま入りうる
 
 ## まだ読んでいないところ
 
-- `vm-ranker/` の選び直しで使う埋め込みの版（7 の V5 か V8 か）
-- 履歴の集計の種類（`DenseWithFavVqvCleaned`）に、どの行動が入るか（返信・引用・滞在など）
+- 本番で DPP が動いているか、`top_k` の値、埋め込みの版（起動引数・環境変数で、リポに無い）
+- 履歴の集計の種類（`DENSE_WITH_LONG_DWELL`）に、どの行動が入るか（返信・引用・滞在など）。集計サービスはリポの外
+- DPP で 0 点になった候補を、home-mixer がその後どう扱うか
 - 返信欄の並び（会話の中の順番）はこのリポの範囲外の可能性
-- 共有の人気投稿の一覧（`home-mixer/sources/popular_posts_source.rs`）は、作り済みの一覧を読むだけ。一覧の作り方はこのファイルには無い
