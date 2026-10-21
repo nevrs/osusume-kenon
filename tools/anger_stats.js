@@ -46,7 +46,7 @@ for (const grp of groups) {
 
 // 左右を入れ替えた組（書き手が左 = L、右 = R。対象を入れ替えただけの文）: 左・野党を批判する側（R）が高い組の数
 const lr = [["sym-flame-gov-L", "sym-flame-gov-R"], ["sym-flame-policy-L", "sym-flame-policy-R"], ["sym-flame-rl-L", "sym-flame-rl-R"],
-  ["sym-flame-harsh-L", "sym-flame-harsh-R"], ["P1L", "P1R"], ["P2L", "P2R"], ["P3L", "P3R"], ["P4L", "P4R"], ["P5L", "P5R"], ["H01", "H02"], ["A06", "A07"]];
+  ["sym-flame-harsh-L", "sym-flame-harsh-R"], ["P1L", "P1R"], ["P2L", "P2R"], ["P3L", "P3R"], ["P4L", "P4R"], ["P5L", "P5R"], ["H01", "H02"], ["A07", "A06"]];
 const byId = Object.fromEntries(rows.map((r) => [r.id, r]));
 console.log(`\n左右の組 ${lr.length} 組 | 指標 | R が高い | R が低い | 同点 | 差の平均（R−L）`);
 for (const c of ["single_anger", "split_anger", "split_hostility"]) {
