@@ -10,6 +10,7 @@ const SHZ_FLUSH_MS = 4000; // まとめて保存するまでの待ち
 let shzRecOn = false;
 let shzGen = 0; // オン・オフのたびに増やす。待っている間にオフ・オンされた処理を捨てるため
 let shzEpoch = 0; // 全削除のたびに増やす。待っている間に全削除された「見た」を捨てるため（オンにする処理は止めない）
+let shzTextEpoch = 0; // 「本文だけ消す」のたびに増やす。保存の読み出しを待っている間に来たら、その保存を捨てるため
 const shzSeen = new Set(); // 保存済み・保存待ちの印（同じ投稿を二重に残さない）。オフにしたら空にする
 const shzTimers = new WeakMap(); // 投稿 → 「見た」とするタイマー
 let shzWatched = new WeakSet(); // 見張りを付けた投稿の要素（X のページから見える印は付けない）
@@ -34,11 +35,23 @@ async function shzCapture(article) {
   if (!shzFlushTimer) shzFlushTimer = setTimeout(shzFlush, SHZ_FLUSH_MS); // 新しく記録するたびに待ち直さない（スクロール中に保存されなくなるため）
 }
 
-function shzFlush() {
+function shzFlush(leaving = false) {
   shzFlushTimer = 0;
   const batch = { ...shzQueue };
   for (const k of Object.keys(shzQueue)) delete shzQueue[k];
-  if (Object.keys(batch).length) chrome.storage.local.set(batch);
+  const keys = Object.keys(batch);
+  if (!keys.length) return;
+  if (leaving) { // ページを離れるときは、読み出しを待たずにすぐ書く（待つと、コールバックの前にページが消えて記録が失われる）
+    chrome.storage.local.set(batch);
+    return;
+  }
+  // 別のタブが先に残した記録（判定済みの点がついていることがある）を、本文だけの記録で上書きしない
+  const epoch = shzEpoch, textEpoch = shzTextEpoch;
+  chrome.storage.local.get(keys, (have) => {
+    if (epoch !== shzEpoch || textEpoch !== shzTextEpoch) return; // 読んでいる間に「すべて消す」「本文だけ消す」が来た
+    const fresh = Object.fromEntries(Object.entries(batch).filter(([k]) => !(k in have)));
+    if (Object.keys(fresh).length) chrome.storage.local.set(fresh);
+  });
 }
 
 function shzDropPending() {
@@ -89,14 +102,8 @@ function shzStopRecording() {
   shzDropPending(); // オフにしたら、保存待ちも捨てる
 }
 
-// 古い記録を消す（オン・オフに関わらず、X のページを開いたとき・設定画面を開いたときに行う）
-async function shzPurgeOld() {
-  const all = await chrome.storage.local.get(null);
-  const recs = Object.fromEntries(Object.entries(all).filter(([k]) => k.startsWith("rec:")));
-  const old = shzPurgeKeys(recs, Date.now(), SHZ_KEEP_DAYS);
-  if (old.length) await chrome.storage.local.remove(old);
-  return Object.keys(recs).filter((k) => !old.includes(k));
-}
+// 期限の来た記録を片付ける（オン・オフに関わらず、X のページを開いたとき・設定画面を開いたときに行う）。残った記録のキーを返す
+const shzPurgeOld = () => shzApplyPurge(SHZ_KEEP_DAYS);
 
 // オンにしたとき: 古い記録を消し、保存済みの印を覚えて、見張りを始める。待っている間にオフ・全削除されたら始めない
 async function shzTurnOn() {
@@ -119,10 +126,16 @@ chrome.storage.onChanged.addListener((c, area) => {
     shzEpoch++;
     shzDropPending();
   }
+  if (c.textClearedAt) { // 設定画面で「本文だけ消す」が押された。まだ保存していない分は残さない（その投稿は、印は覚えたまま二重には記録しない）
+    shzTextEpoch++;
+    clearTimeout(shzFlushTimer);
+    shzFlushTimer = 0;
+    for (const k of Object.keys(shzQueue)) delete shzQueue[k];
+  }
   if (c.recordEnabled) {
     if (c.recordEnabled.newValue === true) shzTurnOn();
     else shzStopRecording();
   }
 });
 // ページを離れるとき、保存待ちがあれば保存する（オフなら保存待ちは無い）
-addEventListener("pagehide", () => { if (shzRecOn) shzFlush(); });
+addEventListener("pagehide", () => { if (shzRecOn) shzFlush(true); });

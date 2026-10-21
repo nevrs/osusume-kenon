@@ -4,8 +4,8 @@ X（x.com）だけで動く Chrome 拡張。X の「おすすめ」が炎上と�
 
 ## 動かし方
 
-- テスト: `node --test test/x-dom.test.js test/judge.test.js test/record-core.test.js`（ディレクトリを渡すと Node 22 では失敗する）
-- 一呼吸・記録の流れ（模擬 DOM）: `node tools/pause-harness.js . <jsdom を入れた node_modules>`、`node tools/record-harness.js . <同>`
+- テスト: `node --test test/x-dom.test.js test/judge.test.js test/record-core.test.js test/stats-core.test.js`（ディレクトリを渡すと Node 22 では失敗する）
+- 一呼吸・記録の流れ（模擬 DOM）: `node tools/pause-harness.js . <jsdom を入れた node_modules>`、`node tools/record-harness.js . <同>`、`node tools/feedjudge-harness.js . <同>`、`node tools/options-harness.js . <同>`
 - 拡張: chrome://extensions →「パッケージ化されていない拡張機能を読み込む」でこのフォルダ
 
 ## 守ること
@@ -16,5 +16,7 @@ X（x.com）だけで動く Chrome 拡張。X の「おすすめ」が炎上と�
 - **流用してよいコード:** attention-vaccine（nevrs/attention-vaccine、同じ作者、MIT。写したら同期しない: DESIGN.md D4）と Apache-2.0 の x-algorithm。
   bouncer（AGPL）・FeedMonitor（ライセンス無し）は読むだけで、コードを写さない
 - 投稿の本文を外部へ送る機能は、送り先と送る条件を設定画面と README に書く
-- 記録（record.js）は、投稿者名の欄・リンク・元の ID を残さない（本文に入っているものは残る）。オフが初期値（DESIGN.md D9）
+- 記録（record.js）は、投稿者名の欄・リンク・元の ID を残さない（本文に入っているものは残る）。オフが初期値（DESIGN.md D9）。判定（feed-judge.js）は端末の中の組み込み AI だけで行い、本文を外へ出さない。点だけの記録に本文を戻さない（D10）
+- 測定モードで、X のスクロール・タブ切り替え・ボタン押下を拡張がしない。進み具合を見せて、本人に眺めてもらう（D10）
+- 結果を人に見せる文には、「目安」であること、「おすすめとフォロー中の差」であって「押し上げた量」ではないことを必ず添える（D10）
 - 利用者に見える文言は日本語（平易に。専門用語は言い換える）

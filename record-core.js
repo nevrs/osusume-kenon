@@ -1,5 +1,5 @@
 // 「おすすめ」で見せられた投稿の記録（DESIGN.md D9）の、画面に触れない部分。record.js が使う。
-// 投稿の ID・本文を読む、広告かどうかを見る、どのタブかを見る、古い記録を消す対象を選ぶ、数える。
+// 投稿の ID・本文を読む、広告かどうかを見る、どのタブかを見る、期限の来た記録を片付ける、数える。
 
 // 投稿の ID（投稿へのリンクの /status/<数字>）。無ければ null
 function shzPostId(article) {
@@ -48,12 +48,44 @@ async function shzHashId(id) {
   return [...new Uint8Array(buf)].slice(0, 8).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-const SHZ_KEEP_DAYS = 14; // 記録を持つ日数（record.js と設定画面で共通）
+const SHZ_KEEP_DAYS = 14; // 本文を持つ日数（record.js と設定画面で共通）
+const SHZ_KEEP_COUNT_DAYS = 365; // 判定済みの記録を、本文を消したあとも点数だけ持つ日数
 
-// 古い記録を消す対象。judged（判定済み）の本文は短く、未判定は長く持つ…は、判定の仕組みができてから決める。今は一律の日数
-function shzPurgeKeys(records, nowMs, maxAgeDays) {
-  const limit = nowMs - maxAgeDays * 86_400_000;
-  return Object.entries(records).filter(([, r]) => !(r.ts >= limit)).map(([k]) => k);
+// 判定が済んでいる記録か（点が 2 つとも数）
+function shzIsJudged(r) {
+  return typeof r.h === "number" && typeof r.a === "number";
+}
+
+// 日付（この端末の時刻での YYYY-MM-DD）
+function shzDay(ts) {
+  const d = new Date(ts), p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+// 期限が来た記録の片付け方。{remove: [キー], strip: {キー: 本文を除いた新しい記録}}
+//   本文の期限（textDays）が過ぎた … 判定済みなら本文を消して点数だけ残す（strip）。未判定なら記録ごと消す（remove）
+//   点数の期限（countDays）が過ぎた、または時刻が壊れている … 記録ごと消す
+function shzPurgePlan(records, nowMs, textDays = SHZ_KEEP_DAYS, countDays = SHZ_KEEP_COUNT_DAYS) {
+  const textLimit = nowMs - textDays * 86_400_000, countLimit = nowMs - countDays * 86_400_000;
+  const remove = [], strip = {};
+  for (const [k, r] of Object.entries(records)) {
+    if (!(r.ts >= countLimit)) remove.push(k);
+    else if (!(r.ts >= textLimit)) {
+      if (!shzIsJudged(r)) remove.push(k);
+      else if ("text" in r) strip[k] = { feed: r.feed, ts: r.ts, a: r.a, h: r.h, jv: r.jv };
+    }
+  }
+  return { remove, strip };
+}
+
+// 保存されている記録に片付けを当てる。残った記録のキーを返す（chrome.storage を使うので、拡張の中でだけ呼ぶ）
+async function shzApplyPurge(textDays = SHZ_KEEP_DAYS) {
+  const all = await chrome.storage.local.get(null);
+  const recs = Object.fromEntries(Object.entries(all).filter(([k]) => k.startsWith("rec:")));
+  const { remove, strip } = shzPurgePlan(recs, Date.now(), textDays);
+  if (Object.keys(strip).length) await chrome.storage.local.set(strip);
+  if (remove.length) await chrome.storage.local.remove(remove);
+  return Object.keys(recs).filter((k) => !remove.includes(k));
 }
 
 // 件数。feed ごと・日ごと
@@ -62,10 +94,10 @@ function shzSummarize(records) {
   for (const r of Object.values(records)) {
     out.total++;
     out.byFeed[r.feed] = (out.byFeed[r.feed] || 0) + 1;
-    const day = new Date(r.ts).toISOString().slice(0, 10);
+    const day = shzDay(r.ts);
     out.byDay[day] = (out.byDay[day] || 0) + 1;
   }
   return out;
 }
 
-if (typeof module !== "undefined") module.exports = { SHZ_KEEP_DAYS, shzPostId, shzPostText, shzIsAd, shzFeedOf, shzHashId, shzPurgeKeys, shzSummarize, SHZ_AD_LABELS };
+if (typeof module !== "undefined") module.exports = { SHZ_KEEP_DAYS, SHZ_KEEP_COUNT_DAYS, shzIsJudged, shzDay, shzPurgePlan, shzPostId, shzPostText, shzIsAd, shzFeedOf, shzHashId, shzSummarize, SHZ_AD_LABELS };

@@ -1,19 +1,38 @@
 // node --test test/record-core.test.js
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { shzPurgeKeys, shzSummarize, shzHashId } = require("../record-core.js");
+const { shzPurgePlan, shzIsJudged, shzSummarize, shzHashId } = require("../record-core.js");
 
 const DAY = 86_400_000;
 const now = Date.UTC(2026, 9, 21, 12);
 
-test("古い記録だけを消す対象にする（14 日ちょうどは残す）", () => {
+test("期限の片付け: 判定済みは本文だけ消して点を残し、未判定は記録ごと消す（14 日ちょうどは残す）", () => {
+  const J = (ts) => ({ text: "本文", feed: "for-you", ts, a: 80, h: 90, jv: "split1/c155" });
   const recs = {
-    "rec:a": { ts: now - 15 * DAY },
-    "rec:b": { ts: now - 14 * DAY },
-    "rec:c": { ts: now - 1 * DAY },
-    "rec:d": { ts: undefined }, // 時刻が壊れたものも消す
+    "rec:a": { text: "未判定", feed: "for-you", ts: now - 15 * DAY }, // 未判定で期限切れ → 消す
+    "rec:b": J(now - 14 * DAY), // ちょうど 14 日 → そのまま
+    "rec:c": J(now - 15 * DAY), // 判定済みで期限切れ → 本文だけ消す
+    "rec:d": { feed: "for-you", ts: undefined }, // 時刻が壊れたものも消す
+    "rec:e": { feed: "for-you", ts: now - 366 * DAY, a: 1, h: 1 }, // 点の期限（365 日）も過ぎた → 消す
+    "rec:f": { feed: "following", ts: now - 100 * DAY, a: 5, h: 6, jv: "split1/c155" }, // 本文は無く、点だけ → そのまま
   };
-  assert.deepEqual(shzPurgeKeys(recs, now, 14).sort(), ["rec:a", "rec:d"]);
+  const { remove, strip } = shzPurgePlan(recs, now);
+  assert.deepEqual(remove.sort(), ["rec:a", "rec:d", "rec:e"]);
+  assert.deepEqual(strip, { "rec:c": { feed: "for-you", ts: now - 15 * DAY, a: 80, h: 90, jv: "split1/c155" } });
+  assert.ok(!("text" in strip["rec:c"]));
+});
+
+test("本文の期限を 0 日にすると、判定済みの本文はすべて消え、未判定は記録ごと消える", () => {
+  const recs = { "rec:a": { text: "x", feed: "for-you", ts: now - 1000, a: 1, h: 1 }, "rec:b": { text: "y", feed: "for-you", ts: now - 1000 } };
+  const { remove, strip } = shzPurgePlan(recs, now, 0);
+  assert.deepEqual(remove, ["rec:b"]);
+  assert.deepEqual(Object.keys(strip), ["rec:a"]);
+});
+
+test("判定済みとは、点（h・a）が 2 つとも数であること", () => {
+  assert.equal(shzIsJudged({ h: 0, a: 0 }), true);
+  assert.equal(shzIsJudged({ h: 50 }), false);
+  assert.equal(shzIsJudged({ h: "50", a: 1 }), false);
 });
 
 test("件数を feed ごと・日ごとに数える", () => {

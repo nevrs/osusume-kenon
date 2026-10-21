@@ -36,14 +36,15 @@ function setup({ url = "https://x.com/home", tab = "おすすめ", stored = {}, 
   if (enabled) store.recordEnabled = true;
   const listeners = [];
   const ios = [];
+  const delay = { ms: 20 }; // 読み出しにかかる時間（割り込みの試験で伸ばす）
   w.IntersectionObserver = class { constructor(cb) { this.cb = cb; this.observed = new Set(); ios.push(this); } observe(el) { this.observed.add(el); } disconnect() { this.observed.clear(); this.dead = true; } };
   Object.defineProperty(w, "crypto", { value: nodeCrypto.webcrypto, configurable: true }); // jsdom 既定の crypto には subtle が無い
   w.TextEncoder = TextEncoder;
   w.chrome = { storage: {
     local: {
       get: (arg, cb) => {
-        const res = arg === null ? { ...store } : Object.fromEntries(Object.entries(arg).map(([k, d]) => [k, k in store ? store[k] : d]));
-        if (cb) { setTimeout(() => cb(res), 20); return undefined; }
+        const res = arg === null ? { ...store } : Array.isArray(arg) ? Object.fromEntries(arg.filter((k) => k in store).map((k) => [k, store[k]])) : Object.fromEntries(Object.entries(arg).map(([k, d]) => [k, k in store ? store[k] : d]));
+        if (cb) { setTimeout(() => cb(res), delay.ms); return undefined; }
         return Promise.resolve(res);
       },
       set: (o, cb) => { for (const k of Object.keys(o)) writes[k] = (writes[k] || 0) + 1; Object.assign(store, o); cb?.(); return Promise.resolve(); },
@@ -59,7 +60,8 @@ function setup({ url = "https://x.com/home", tab = "おすすめ", stored = {}, 
   // 設定画面と同じ順: 先に recordClearedAt を書いて開いているタブに伝え、そのあとで記録を消す
   const clearAll = () => { store.recordClearedAt = Date.now(); for (const f of listeners) f({ recordClearedAt: { newValue: store.recordClearedAt } }, "local"); for (const k of Object.keys(store)) if (k.startsWith("rec:")) delete store[k]; };
   const recs = () => Object.fromEntries(Object.entries(store).filter(([k]) => k.startsWith("rec:")));
-  return { w, d, store, ios, art, see, setEnabled, clearAll, recs, writes };
+  const fire = (c) => { for (const f of listeners) f(c, "local"); };
+  return { w, d, store, ios, art, see, setEnabled, clearAll, recs, writes, fire, delay };
 }
 
 const results = [];
@@ -170,6 +172,59 @@ const check = (name, ok) => results.push(`${ok ? "OK" : "NG"}  ${name}`);
   t.see("111");
   await wait(5300);
   check("オンの準備中に「すべて消す」が届いても、記録は続く", t.recs()[`rec:${hashOf("111")}`]?.text === "怒っている投稿です");
+
+  // 別のタブが先に残した、判定済みの記録を上書きしない
+  t = setup({ enabled: true });
+  await wait(150);
+  const judged = { feed: "following", ts: Date.now() - 1000, a: 81, h: 92, jv: "split1/c155" };
+  t.store[`rec:${hashOf("111")}`] = judged; // このタブがオンにしたあとで、別のタブが残して判定まで済ませた
+  t.see("111");
+  await wait(5300);
+  check("別のタブが先に残した判定済みの記録を、本文だけの記録で上書きしない", JSON.stringify(t.store[`rec:${hashOf("111")}`]) === JSON.stringify(judged) && !t.writes[`rec:${hashOf("111")}`]);
+
+  // 「本文だけ消す」: まだ保存していない分は残さない
+  t = setup({ enabled: true });
+  await wait(150);
+  t.see("111");
+  await wait(1300); // 見たと判定されたが、まだ保存していない
+  t.store.textClearedAt = Date.now();
+  t.fire({ textClearedAt: { newValue: t.store.textClearedAt } });
+  await wait(4500);
+  check("「本文だけ消す」のあと、開いているタブの保存待ちが本文つきで書かれない", Object.keys(t.recs()).length === 0);
+  t.see("222");
+  await wait(5300);
+  check("「本文だけ消す」のあとも、別の投稿は記録を続ける", t.recs()[`rec:${hashOf("222")}`]?.text === "自分の本文");
+
+  // ページを離れるとき、読み出しを待たずにすぐ書く
+  t = setup({ enabled: true });
+  await wait(150);
+  t.see("111");
+  await wait(1300); // 見たと判定されたが、まだ保存していない
+  t.delay.ms = 100000; // 読み出しのコールバックは、ページが消えるまで返ってこない
+  t.w.dispatchEvent(new t.w.Event("pagehide"));
+  await wait(50);
+  check("ページを離れるときは、読み出しの返事を待たずに保存待ちを書く", t.recs()[`rec:${hashOf("111")}`]?.text === "怒っている投稿です");
+
+  // 保存の読み出しを待っている間に「すべて消す」「本文だけ消す」が来ても、本文を戻さない
+  t = setup({ enabled: true });
+  await wait(150);
+  t.see("111");
+  await wait(1300);
+  t.delay.ms = 300;
+  t.w.eval("shzFlush()"); // 保存の読み出しを始める
+  t.clearAll(); // 読み出しの返事を待っている間に「すべて消す」
+  await wait(600);
+  check("保存の読み出しを待つ間に「すべて消す」が来たら、その保存を捨てる", Object.keys(t.recs()).length === 0);
+  t = setup({ enabled: true });
+  await wait(150);
+  t.see("111");
+  await wait(1300);
+  t.delay.ms = 300;
+  t.w.eval("shzFlush()");
+  t.store.textClearedAt = Date.now();
+  t.fire({ textClearedAt: { newValue: t.store.textClearedAt } });
+  await wait(600);
+  check("保存の読み出しを待つ間に「本文だけ消す」が来たら、その保存を捨てる", Object.keys(t.recs()).length === 0);
 
   console.log(results.join("\n"));
   process.exit(results.some((x) => x.startsWith("NG")) ? 1 : 0);
