@@ -1,7 +1,7 @@
-// node --test test/x-dom.test.js
+// node --test test/x-counts.test.js
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { parseCount, parseActionLabel, countsOf } = require("../x-dom.js");
+const { parseCount, parseActionLabel, countsOf } = require("../tools/x-counts.js");
 const fixture = require("./fixtures/ja-home-2026-10-20.json");
 
 test("parseCount", () => {

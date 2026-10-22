@@ -15,6 +15,7 @@ const shzSeen = new Set(); // 保存済み・保存待ちの印（同じ投稿�
 const shzTimers = new WeakMap(); // 投稿 → 「見た」とするタイマー
 let shzWatched = new WeakSet(); // 見張りを付けた投稿の要素（X のページから見える印は付けない）
 const shzQueue = {}; // 保存待ち {rec:<印>: {...}}
+const shzClearQueue = () => { for (const k of Object.keys(shzQueue)) delete shzQueue[k]; };
 let shzFlushTimer = 0;
 let shzObserver = null;
 let shzMutation = null;
@@ -38,7 +39,7 @@ async function shzCapture(article) {
 function shzFlush(leaving = false) {
   shzFlushTimer = 0;
   const batch = { ...shzQueue };
-  for (const k of Object.keys(shzQueue)) delete shzQueue[k];
+  shzClearQueue();
   const keys = Object.keys(batch);
   if (!keys.length) return;
   if (leaving) { // ページを離れるときは、読み出しを待たずにすぐ書く（待つと、コールバックの前にページが消えて記録が失われる）
@@ -57,7 +58,7 @@ function shzFlush(leaving = false) {
 function shzDropPending() {
   clearTimeout(shzFlushTimer);
   shzFlushTimer = 0;
-  for (const k of Object.keys(shzQueue)) delete shzQueue[k];
+  shzClearQueue();
   shzSeen.clear();
 }
 
@@ -130,7 +131,7 @@ chrome.storage.onChanged.addListener((c, area) => {
     shzTextEpoch++;
     clearTimeout(shzFlushTimer);
     shzFlushTimer = 0;
-    for (const k of Object.keys(shzQueue)) delete shzQueue[k];
+    shzClearQueue();
   }
   if (c.recordEnabled) {
     if (c.recordEnabled.newValue === true) shzTurnOn();

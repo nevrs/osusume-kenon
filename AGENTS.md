@@ -4,7 +4,7 @@ X（x.com）だけで動く Chrome 拡張。X の「おすすめ」が炎上と�
 
 ## 動かし方
 
-- テスト: `node --test test/x-dom.test.js test/record-core.test.js test/stats-core.test.js`（ディレクトリを渡すと Node 22 では失敗する）
+- テスト: `node --test test/x-counts.test.js test/record-core.test.js test/stats-core.test.js`（ディレクトリを渡すと Node 22 では失敗する）
 - 記録・判定・設定画面の流れ（模擬 DOM）: `node tools/record-harness.js . <jsdom を入れた node_modules>`、`node tools/fold-harness.js . <同>`、`node tools/feedjudge-harness.js . <同>`、`node tools/options-harness.js . <同>`
 - 拡張: chrome://extensions →「パッケージ化されていない拡張機能を読み込む」でこのフォルダ
 
