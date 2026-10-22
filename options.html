@@ -49,6 +49,15 @@
   <table id="sessTable" hidden></table>
   <p class="note" id="sessDiff"></p>
 </section>
+<section>
+  <details>
+    <summary><strong>しくみ・使っている AI</strong></summary>
+    <p class="note">判定には、Chrome に組み込まれた AI（Gemini Nano）を使います。パソコンの中で動くので、投稿の本文を外へ送りません。Chrome の AI が使えない端末では、記録だけで判定はされません。</p>
+    <p class="note">① 画面に 0.5 秒以上出た投稿の本文を、端末の中に残す。② AI が本文を読み、「怒り」と「敵意」を 0〜100 点で付ける。③ 70 点以上を「強い」と数え、「おすすめ」と「フォロー中」で、強い投稿の割合を比べる。</p>
+    <p class="note">「たたむ」は、同じ AI で、敵意が 70 点以上の「おすすめ」の投稿を隠します。判定が間に合わないときは隠さず見せます。</p>
+    <p class="note">AI は誤ります。正当な批判を「怒り」と読むこともあります。数字は目安で、2 つの画面の違いを示すだけです。</p>
+  </details>
+</section>
 <p id="saved" class="note" aria-live="polite"></p>
 <script src="record-core.js"></script>
 <script src="stats-core.js"></script>
