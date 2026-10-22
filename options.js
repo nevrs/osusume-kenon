@@ -4,12 +4,6 @@ const say = (t) => { $("saved").textContent = t; };
 const FEED_LABEL = { "for-you": "おすすめ", following: "フォロー中" };
 const SESSION_TARGET = 50; // 測定モードで、それぞれの feed について集める件数
 
-const box = $("pauseEnabled");
-chrome.storage.local.get({ pauseEnabled: false }, (v) => { box.checked = v.pauseEnabled === true; });
-box.addEventListener("change", () => {
-  chrome.storage.local.set({ pauseEnabled: box.checked }, () => say(box.checked ? "一呼吸をオンにしました" : "一呼吸をオフにしました"));
-});
-
 const rec = $("recordEnabled");
 chrome.storage.local.get({ recordEnabled: false }, (v) => { rec.checked = v.recordEnabled === true; });
 rec.addEventListener("change", async () => {
