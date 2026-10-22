@@ -83,7 +83,7 @@ const check = (name, ok) => results.push(`${ok ? "OK" : "NG"}  ${name}`);
   check("オンにしたとき、14 日より古い記録を消す", !("rec:old" in t.store) && `rec:${hashOf("666")}` in t.store);
   for (const id of ["111", "222", "333", "444", "666"]) t.see(id);
   t.see("111"); // 同じ投稿をもう一度
-  t.see("555"); await wait(500); t.see("555", 0); // 1 秒たつ前に画面から出る
+  t.see("555"); await wait(250); t.see("555", 0); // 0.5 秒たつ前に画面から出る
   const ts666 = t.store[`rec:${hashOf("666")}`].ts;
   await wait(5600);
   t.see("111"); t.see("666"); t.see("777"); // 保存したあとで、同じ投稿をもう一度見る（777 は初めて）
@@ -95,7 +95,7 @@ const check = (name, ok) => results.push(`${ok ? "OK" : "NG"}  ${name}`);
   check("引用の投稿は、自分の本文だけを残す（引用元の本文は残さない）", get("222")?.text === "自分の本文" && !JSON.stringify(r).includes("引用元の本文"));
   check("広告は残さない", !get("333"));
   check("本文の無い投稿（画像だけ）は残さない", !get("444"));
-  check("1 秒たつ前に画面から出た投稿は残さない", !get("555"));
+  check("0.5 秒たつ前に画面から出た投稿は残さない", !get("555"));
   check("保存したあとで同じ投稿をもう一度見ても、書き直さない", t.writes[`rec:${hashOf("111")}`] === 1);
   check("前に保存済みの投稿は、見ても時刻を書き換えない", get("666")?.ts === ts666 && !t.writes[`rec:${hashOf("666")}`]);
   check("表示名が「Ad」の人の投稿は、広告とみなさず残す", get("777")?.text === "表示名が Ad の人の投稿");
