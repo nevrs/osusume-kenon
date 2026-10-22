@@ -129,7 +129,7 @@ async function shzFoldPump() {
       if (res && !res.failed) { shzFoldDiag.maxH = Math.max(shzFoldDiag.maxH, res.h); shzFoldDiag.ms += Date.now() - t0; shzFoldNote("judged"); }
       else {
         if (res?.err) shzFoldDiag.err = res.err;
-        else if (res && !(id && text)) shzFoldDiag.err = "判定の前に、投稿の本文か ID が読めなくなった";
+        else if (res && !(id && text)) shzFoldDiag.err = "post-gone"; // 判定の前に、投稿の本文か ID が読めなくなった
         shzFoldNote(res === null ? "aiOff" : "failed");
       }
       if (id && res && !res.failed) shzFoldResult.set(id, res.h); // 間に合わずに見せたあとでも覚える（X が要素を作り直したとき、また空白にしない）

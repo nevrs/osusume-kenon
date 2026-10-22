@@ -56,8 +56,10 @@ async function shzFeedJudge(text) {
     return null;
   }
   try {
-    const o = JSON.parse(await s.prompt(`投稿:\n${text}`, { responseConstraint: SHZ_FJ_SCHEMA }));
-    if (!Number.isFinite(o.anger) || !Number.isFinite(o.hostility)) return { failed: true, err: "点が数でない" };
+    const out = await s.prompt(`投稿:\n${text}`, { responseConstraint: SHZ_FJ_SCHEMA });
+    let o;
+    try { o = JSON.parse(out); } catch { return { failed: true, err: "bad-json" }; } // パースのエラー文には AI の出力が入るので、残さない
+    if (!Number.isFinite(o?.anger) || !Number.isFinite(o?.hostility)) return { failed: true, err: "not-a-number" };
     return { a: Math.round(o.anger), h: Math.round(o.hostility) };
   } catch (e) {
     return { failed: true, err: shzFjErr(e) }; // この 1 件だけの失敗（長すぎる本文など）。元は壊さない
