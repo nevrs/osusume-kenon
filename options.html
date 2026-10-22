@@ -23,15 +23,12 @@
 <h1>shizume の設定</h1>
 <section>
   <label><input type="checkbox" id="pauseEnabled"> <span><strong>送る前の一呼吸</strong>（初期値はオフ）</span></label>
-  <p class="note">返信・引用・投稿の下書きを、端末の中の AI（Chrome の組み込み AI）で判定します。相手を攻撃していると読めるときだけ、送信を一度止めて X の仕組みを伝えます。もう一度押せば、そのまま送れます。
-    下書きは外に出さず、保存もしません。判定は誤ることがあります。オフのあいだは、下書きを読みません。</p>
+  <p class="note">下書きが相手への攻撃に読めるとき、送信を一度止めます。もう一度押せば送れます。判定は端末の中だけで、下書きは保存しません。</p>
 </section>
 <section>
   <label><input type="checkbox" id="recordEnabled"> <span><strong>見せられた投稿の記録と判定</strong>（初期値はオフ）</span></label>
-  <p class="note">「おすすめ」「フォロー中」で、投稿の 6 割以上が 0.5 秒以上画面に出ていたものの本文を、端末の中にだけ残します。
-    残すのは、本文・どちらの画面か・時刻・投稿の印（二重に残さないための短い文字列）です。投稿者名やリンクの欄は残しませんが、<strong>本文に書かれた他の人のアカウント名や URL は残ります。本文から X で検索すれば、元の投稿はたどれます。</strong>あなた自身の投稿も記録されることがあります。</p>
-  <p class="note">残した本文は、空き時間に端末の中の AI が少しずつ読み、「怒り」と「敵意」の点を付けます（1 日 300 件まで。測定モードの分は数えません）。
-    本文は 14 日で消えます。判定済みの記録は、時刻・画面の別・2 つの点・投稿の印だけが 1 年残ります。判定前の記録は 14 日で消えます。外へは何も送りません。</p>
+  <p class="note">「おすすめ」「フォロー中」で見た投稿の本文を、端末の中にだけ残し、AI で「怒り」「敵意」の点を付けます。外へは送りません。
+    <strong>本文に書かれた他人のアカウント名や URL も残ります。</strong>本文は 14 日、点だけの記録は 1 年で消えます。</p>
   <p class="note">いま残っている記録: <span id="recCount">…</span></p>
   <p class="note"><button type="button" id="recStrip">本文だけ消す（判定済みの点は残す）</button><button type="button" id="recDelete">すべて消す</button></p>
 </section>
@@ -40,18 +37,18 @@
   <p class="note" id="trendNote">…</p>
   <table id="trendTable" hidden></table>
   <table id="dayTable" hidden></table>
-  <p class="note">「強い」は点が 70 以上です。精度は自作の例文で測ったもので、実際の投稿では外れることがあります。「怒り」には正当な批判も含まれます。
-    <strong>差は、フォローした人の投稿と、X が選んで出した投稿の違いです。アルゴリズムが押し上げた量ではありません。</strong>判定済みが 30 件に満たない割合は出しません。</p>
+  <p class="note">目安です。精度は自作の例文で測ったもので、実際の投稿では外れることがあります。
+    <strong>差は、フォローした人の投稿と、X が選んだ投稿の違いです。アルゴリズムが押し上げた量ではありません。</strong></p>
 </section>
 <section>
   <h2>測定モード（おすすめとフォロー中を比べる）</h2>
-  <p class="note">始めたら、「おすすめ」と「フォロー中」を、それぞれ 50 件ぶんほど<strong>あなた自身が</strong>眺めてください。shizume はスクロールもタブの切り替えもしません。
-    始めると記録がオンになり、終わると元に戻ります。始める前の記録は数えません。結果は目安で、フォロー中との差です。押し上げた量ではありません。測定中に記録をオフにすると、測定も終わります。</p>
+  <p class="note">始めたら、「おすすめ」と「フォロー中」を、それぞれ 50 件ぶんほど<strong>あなた自身が</strong>眺めてください。shizume はスクロールしません。終わると記録の設定は元に戻ります。</p>
   <p class="note"><button type="button" id="sessStart">測定を始める</button><button type="button" id="sessEnd" hidden>終了して結果を見る</button></p>
   <p class="note" id="sessProgress"></p>
   <table id="sessTable" hidden></table>
   <p class="note" id="sessDiff"></p>
 </section>
+<p class="note">詳しい仕様は、拡張のフォルダの README.md と DESIGN.md にあります。</p>
 <p id="saved" class="note" aria-live="polite"></p>
 <script src="record-core.js"></script>
 <script src="stats-core.js"></script>
