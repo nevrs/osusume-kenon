@@ -52,7 +52,7 @@ function setup({ url = "https://x.com/home", tab = "おすすめ", stored = {}, 
     },
     onChanged: { addListener: (f) => listeners.push(f) },
   } };
-  w.eval(["x-dom.js", "record-core.js", "record.js"].map((f) => fs.readFileSync(path.join(repo, f), "utf8")).join(";\n"));
+  w.eval(["x-dom.js", "record-core.js", "log.js", "record.js"].map((f) => fs.readFileSync(path.join(repo, f), "utf8")).join(";\n"));
   const d = w.document;
   const art = (id) => [...d.querySelectorAll("article")].find((a) => a.querySelector(`a[href$="/status/${id}"]`));
   const see = (id, ratio = 0.8) => { for (const io of ios) if (io.observed.has(art(id))) io.cb([{ target: art(id), isIntersecting: ratio > 0, intersectionRatio: ratio }]); };

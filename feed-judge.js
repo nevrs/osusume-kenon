@@ -26,8 +26,13 @@ let shzFjRunning = false;
 const shzFjSkip = new Set(); // 判定に失敗した記録。このタブでは繰り返し試さない（後ろの記録を止めないため）
 
 async function shzFjMakeBase() {
-  if ((await LanguageModel.availability(SHZ_FJ_LANG)) !== "available") return null; // ダウンロードを始めない
-  return LanguageModel.create({ ...SHZ_FJ_LANG, initialPrompts: [{ role: "system", content: SHZ_FJ_SYSTEM }] });
+  const av = await LanguageModel.availability(SHZ_FJ_LANG);
+  shzLog("judge", "availability", av);
+  if (av !== "available") return null; // ダウンロードを始めない
+  const t0 = Date.now();
+  const base = await LanguageModel.create({ ...SHZ_FJ_LANG, initialPrompts: [{ role: "system", content: SHZ_FJ_SYSTEM }] });
+  shzLog("judge", "base-created", { ms: Date.now() - t0 });
+  return base;
 }
 
 // 失敗の理由（エラーの種類と文。本文は入れない。診断に出す）
@@ -35,12 +40,13 @@ const shzFjErr = (e) => `${e?.name || "Error"}: ${e?.message || e}`.slice(0, 160
 
 // 1 件を判定して {a, h} を返す。組み込み AI が使えなければ null、その 1 件だけが失敗したら {failed: true, err}
 async function shzFeedJudge(text) {
-  if (typeof LanguageModel === "undefined") return null;
+  if (typeof LanguageModel === "undefined") { shzLog("judge", "no-LanguageModel"); return null; }
   const pending = (shzFjBase ??= shzFjMakeBase());
   let base = null;
   try {
     base = await pending;
-  } catch {
+  } catch (e) {
+    shzLog("judge", "base-error", shzFjErr(e));
     if (shzFjBase === pending) shzFjBase = null; // 作れなかった。次に作り直す
     return null;
   }
@@ -51,17 +57,19 @@ async function shzFeedJudge(text) {
   let s = null;
   try {
     s = await base.clone();
-  } catch {
+  } catch (e) {
+    shzLog("judge", "clone-error", shzFjErr(e));
     if (shzFjBase === pending) { shzFjBase = null; base.destroy(); } // 元が壊れている。次に作り直す
     return null;
   }
   try {
     const out = await s.prompt(`投稿:\n${text}`, { responseConstraint: SHZ_FJ_SCHEMA });
     let o;
-    try { o = JSON.parse(out); } catch { return { failed: true, err: "bad-json" }; } // パースのエラー文には AI の出力が入るので、残さない
+    try { o = JSON.parse(out); } catch { shzLog("judge", "bad-json", { outLen: String(out).length }); return { failed: true, err: "bad-json" }; } // パースのエラー文には AI の出力が入るので、残さない
     if (!Number.isFinite(o?.anger) || !Number.isFinite(o?.hostility)) return { failed: true, err: "not-a-number" };
     return { a: Math.round(o.anger), h: Math.round(o.hostility) };
   } catch (e) {
+    shzLog("judge", "prompt-error", { err: shzFjErr(e), len: text.length });
     return { failed: true, err: shzFjErr(e) }; // この 1 件だけの失敗（長すぎる本文など）。元は壊さない
   } finally {
     s?.destroy();
@@ -92,18 +100,21 @@ async function shzFjRun() {
       .filter(([k, r]) => k.startsWith("rec:") && r.text && !shzIsJudged(r) && !shzFjSkip.has(k))
       .sort(([, x], [, y]) => (y.ts >= start) - (x.ts >= start) || x.ts - y.ts) // 測定モードの分を先に、あとは古い順（先に期限が来る）
       .map(([k]) => k);
+    if (todo.length) shzLog("judge", "record-run", { todo: todo.length });
     for (const k of todo) {
       const st = await shzFjState();
       if (!shzFjShouldRun(st)) return;
       const fast = shzFjSessionOn(st), today = shzDay(Date.now());
       const used = st.judgeDay?.d === today ? st.judgeDay.n : 0;
-      if (!fast && used >= SHZ_FJ.dailyCap) return;
+      if (!fast && used >= SHZ_FJ.dailyCap) { shzLog("judge", "daily-cap", { used }); return; }
       const lock = st.judgeLock;
-      if (lock && lock.id !== shzFjTab && Date.now() - lock.ts < SHZ_FJ.lockMs) return; // 別のタブが判定している
+      if (lock && lock.id !== shzFjTab && Date.now() - lock.ts < SHZ_FJ.lockMs) { shzLog("judge", "locked-by-other-tab"); return; } // 別のタブが判定している
       await chrome.storage.local.set({ judgeLock: { id: shzFjTab, ts: Date.now() } });
       const cur = (await chrome.storage.local.get(k))[k];
       if (!cur || !cur.text || shzIsJudged(cur)) continue;
+      const t0 = Date.now();
       const res = await shzFeedJudge(cur.text);
+      shzLog("judge", "record-judged", res ? (res.failed ? { failed: res.err } : { ms: Date.now() - t0, a: res.a, h: res.h }) : "ai-unavailable");
       if (!res) return; // 組み込み AI が使えない。次の見回りで確かめ直す
       if (res.failed) { shzFjSkip.add(k); await shzFjSleep(fast ? SHZ_FJ.sessionGapMs : SHZ_FJ.gapMs); continue; } // この 1 件だけの失敗。後ろの記録は続ける（間は空ける）
       const latest = (await chrome.storage.local.get(k))[k];

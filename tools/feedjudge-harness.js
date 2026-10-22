@@ -49,7 +49,7 @@ function setup({ stored = {}, cap = 300, availability = "available", aiDelay = 0
   const swap = (src, from, to) => { if (!src.includes(from)) throw new Error(`置き換え先が見つからない: ${from}`); return src.replace(from, to); };
   let fj = fs.readFileSync(path.join(repo, "feed-judge.js"), "utf8");
   for (const [from, to] of [["gapMs: 2500", "gapMs: 20"], ["sessionGapMs: 300", "sessionGapMs: 5"], ["tickMs: 60_000", "tickMs: 100000"], ["startDelayMs: 8000", "startDelayMs: 10"], ["lockMs: 15_000", "lockMs: 400"], ["dailyCap: 300", `dailyCap: ${cap}`]]) fj = swap(fj, from, to);
-  w.eval([fs.readFileSync(path.join(repo, "x-dom.js"), "utf8"), fs.readFileSync(path.join(repo, "record-core.js"), "utf8"), fj].join(";\n"));
+  w.eval([fs.readFileSync(path.join(repo, "x-dom.js"), "utf8"), fs.readFileSync(path.join(repo, "record-core.js"), "utf8"), fs.readFileSync(path.join(repo, "log.js"), "utf8"), fj].join(";\n"));
   const fire = (c) => { for (const f of listeners) f(c, "local"); };
   return { w, store, calls, ai, fire, run: () => w.eval("shzFjRun()") };
 }

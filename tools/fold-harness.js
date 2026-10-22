@@ -21,10 +21,10 @@ const page = (tab, body) => `<body>
 const POSTS = [article("1", "馬鹿じゃないの"), article("2", "いい天気ですね"), article("3", "広告の馬鹿", `<span>広告</span>`), article("4", null), article("5", "壊れる投稿")].join("");
 
 // 偽の AI: 「馬鹿」を含めば 敵意 90、それ以外は 0。「壊れる」は 1 件だけ失敗
-function setup({ tab = "おすすめ", body = POSTS, foldEnabled = false, aiDelay = 0, noAI = false, lang = "ja", waitMs = 6000, aiOffMs = 60000 } = {}) {
+function setup({ tab = "おすすめ", body = POSTS, foldEnabled = false, aiDelay = 0, noAI = false, lang = "ja", debug = false, waitMs = 6000, aiOffMs = 60000 } = {}) {
   const dom = new JSDOM(page(tab, body), { url: "https://x.com/home", runScripts: "outside-only", pretendToBeVisual: true });
   const w = dom.window;
-  const store = { foldEnabled, lang };
+  const store = { foldEnabled, lang, debugEnabled: debug };
   const writes = [];
   const listeners = [];
   const calls = { prompts: [] };
@@ -58,7 +58,7 @@ function setup({ tab = "おすすめ", body = POSTS, foldEnabled = false, aiDela
   fold = swap(fold, "waitMs: 6000", `waitMs: ${waitMs}`);
   fold = swap(fold, "aiOffMs: 60_000", `aiOffMs: ${aiOffMs}`);
   const fj = swap(fs.readFileSync(path.join(repo, "feed-judge.js"), "utf8"), "startDelayMs: 8000", "startDelayMs: 100000000");
-  w.eval([fs.readFileSync(path.join(repo, "x-dom.js"), "utf8"), fs.readFileSync(path.join(repo, "record-core.js"), "utf8"), fs.readFileSync(path.join(repo, "i18n.js"), "utf8"), fj, fold].join(";\n"));
+  w.eval([fs.readFileSync(path.join(repo, "x-dom.js"), "utf8"), fs.readFileSync(path.join(repo, "record-core.js"), "utf8"), fs.readFileSync(path.join(repo, "i18n.js"), "utf8"), fs.readFileSync(path.join(repo, "log.js"), "utf8"), fj, fold].join(";\n"));
   const d = w.document;
   const art = (id) => [...d.querySelectorAll("article")].find((a) => a.querySelector(`a[href$="/status/${id}"]`));
   const st = (id) => art(id)?.getAttribute("data-shizume-fold");
@@ -152,6 +152,13 @@ const check = (name, ok, detail) => results.push(`${ok ? "OK" : "NG"}  ${name}${
   t.add(article("2", "ふつう")); // 変化を起こして走査させる
   await wait(400);
   check("X が同じ要素に別の投稿を入れたら、前の印を捨てて判定し直す（別の投稿を隠したままにしない）", a1.getAttribute("data-shizume-fold") === "open" && !a1.querySelector(".shizume-fold-box"), String(a1.getAttribute("data-shizume-fold")));
+
+  // 動作ログ
+  t = setup({ foldEnabled: true, debug: true, aiDelay: 20 });
+  await wait(2600);
+  const lg = JSON.stringify(t.store.debugLog || []);
+  check("動作ログをオンにすると、判定・たたむの出来事が残る", /"judged"/.test(lg) && /"folded"/.test(lg) && /"feed"/.test(lg), lg.slice(0, 200));
+  check("動作ログに、投稿の本文・ID・投稿者名を入れない", !/馬鹿|天気|壊れる|名前|someone|status/.test(lg), lg.slice(0, 300));
 
   // 英語
   t = setup({ foldEnabled: true, lang: "en", body: article("1", "馬鹿じゃないの") });

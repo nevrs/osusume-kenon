@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "__MSG_extName__",
-  "version": "0.8.2",
+  "version": "0.8.3",
   "icons": { "16": "icons/icon16.png", "32": "icons/icon32.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
   "description": "__MSG_extDesc__",
   "default_locale": "ja",
@@ -10,7 +10,7 @@
   "content_scripts": [
     {
       "matches": ["https://x.com/*"],
-      "js": ["x-dom.js", "record-core.js", "i18n.js", "record.js", "feed-judge.js", "fold.js"],
+      "js": ["x-dom.js", "record-core.js", "i18n.js", "log.js", "record.js", "feed-judge.js", "fold.js"],
       "run_at": "document_idle"
     }
   ]

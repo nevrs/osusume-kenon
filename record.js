@@ -42,6 +42,7 @@ function shzFlush(leaving = false) {
   shzClearQueue();
   const keys = Object.keys(batch);
   if (!keys.length) return;
+  shzLog("record", "flush", { n: keys.length, leaving });
   if (leaving) { // ページを離れるときは、読み出しを待たずにすぐ書く（待つと、コールバックの前にページが消えて記録が失われる）
     chrome.storage.local.set(batch);
     return;
@@ -114,6 +115,7 @@ async function shzTurnOn() {
   if (gen !== shzGen) return;
   if (epoch === shzEpoch) for (const k of kept) shzSeen.add(k.slice(4)); // 待っている間に全削除されていたら、消した記録の印は覚えない
   shzRecOn = true;
+  shzLog("record", "on");
   shzStartRecording();
 }
 

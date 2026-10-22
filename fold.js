@@ -67,6 +67,7 @@ function shzFoldHide(article, id) {
   box.addEventListener("click", (e) => e.stopPropagation()); // X の「投稿を開く」（詳細ページへ移る）まで届かせない
   btn.addEventListener("click", () => {
     if (id) shzFoldOpened.add(id);
+    shzLog("fold", "opened-by-user");
     shzFoldShow(article);
   });
   box.append(label, btn);
@@ -79,6 +80,7 @@ function shzFoldApply(article, id, verdict) {
     if (id && !shzFoldCounted.has(id)) {
       shzFoldCounted.add(id);
       shzFoldNote("folded");
+      shzLog("fold", "folded", { threshold: shzFoldStrong });
       shzFoldCount();
     }
   } else shzFoldShow(article);
@@ -108,7 +110,7 @@ function shzFoldWatch(article) {
   shzFoldNote("pending");
   shzFoldQueue.add(article);
   setTimeout(() => { // 間に合わなければ見せる
-    if (article.getAttribute(SHZ_FOLD_ATTR) === "pending") { shzFoldQueue.delete(article); shzFoldShow(article); shzFoldNote("late"); }
+    if (article.getAttribute(SHZ_FOLD_ATTR) === "pending") { shzFoldQueue.delete(article); shzFoldShow(article); shzFoldNote("late"); shzLog("fold", "late-shown", { waitMs: SHZ_FOLD.waitMs }); }
   }, SHZ_FOLD.waitMs);
   shzFoldPump();
 }
@@ -125,11 +127,11 @@ async function shzFoldPump() {
       if (!next.isConnected || next.getAttribute(SHZ_FOLD_ATTR) !== "pending") continue;
       const id = shzPostId(next), text = shzPostText(next);
       const t0 = Date.now();
-      const res = id && text ? await shzFeedJudge(text) : { failed: true };
+      const res = id && text ? await shzFeedJudge(text) : { failed: true, err: "post-gone" }; // 判定の前に、投稿の本文か ID が読めなくなった
+      shzLog("fold", "judged", res ? (res.failed ? { failed: res.err } : { ms: Date.now() - t0, a: res.a, h: res.h, queue: shzFoldQueue.size }) : "ai-unavailable");
       if (res && !res.failed) { shzFoldDiag.maxH = Math.max(shzFoldDiag.maxH, res.h); shzFoldDiag.ms += Date.now() - t0; shzFoldNote("judged"); }
       else {
         if (res?.err) shzFoldDiag.err = res.err;
-        else if (res && !(id && text)) shzFoldDiag.err = "post-gone"; // 判定の前に、投稿の本文か ID が読めなくなった
         shzFoldNote(res === null ? "aiOff" : "failed");
       }
       if (id && res && !res.failed) shzFoldResult.set(id, res.h); // 間に合わずに見せたあとでも覚える（X が要素を作り直したとき、また空白にしない）
@@ -137,6 +139,7 @@ async function shzFoldPump() {
       if (!shzFoldOn || !next.isConnected || next.getAttribute(SHZ_FOLD_ATTR) !== "pending") continue; // 待っているあいだに、オフ・間に合わず表示・要素の消去
       if (res === null) { // 組み込み AI が使えない。待っている分も見せる
         shzFoldAiOffUntil = Date.now() + SHZ_FOLD.aiOffMs;
+        shzLog("fold", "ai-off", { pauseMs: SHZ_FOLD.aiOffMs, shown: shzFoldQueue.size + 1 });
         shzFoldShow(next);
         for (const a of shzFoldQueue) shzFoldShow(a);
         shzFoldQueue.clear();
@@ -150,13 +153,19 @@ async function shzFoldPump() {
   }
 }
 
+let shzFoldLastFeed;
+// ページの種類だけ（ログ用）。URL そのものは投稿者名・投稿 ID を含むので残さない
+const shzFoldPageKind = (p) => (/^\/(home|explore|notifications|messages|search|bookmarks|lists|settings|i)(\/|$)/.exec(p)?.[1] ?? (/\/status\//.test(p) ? "post" : "other"));
 function shzFoldScan() {
+  const feed = shzFeedOf(document, location.pathname);
+  if (feed !== shzFoldLastFeed) { shzFoldLastFeed = feed; shzLog("fold", "feed", { feed: feed ?? "unknown", page: shzFoldPageKind(location.pathname) }); }
   for (const a of document.querySelectorAll(X_DOM.post)) shzFoldWatch(a);
 }
 
 function shzFoldStart() {
   if (shzFoldObserver) return;
   shzFoldOn = true;
+  shzLog("fold", "start", { threshold: shzFoldStrong });
   shzFoldStyle();
   let pending = false;
   shzFoldObserver = new MutationObserver(() => {
@@ -169,6 +178,7 @@ function shzFoldStart() {
 }
 
 function shzFoldStop() {
+  shzLog("fold", "stop");
   shzFoldOn = false;
   shzFoldObserver?.disconnect();
   shzFoldObserver = null;

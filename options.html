@@ -60,6 +60,13 @@
     <p class="note" data-i18n="help5"></p>
   </details>
 </section>
+<section>
+  <h2 data-i18n="logH"></h2>
+  <label><input type="checkbox" id="debugEnabled"> <span data-i18n="logLabel"></span></label>
+  <p class="note" data-i18n="logNote"></p>
+  <p class="note"><button type="button" id="logCopy" data-i18n="logCopy"></button><button type="button" id="logClear" data-i18n="logClear"></button> <span id="logCount"></span></p>
+  <pre id="logView" class="note" style="max-height:240px;overflow:auto;white-space:pre-wrap;font-size:11px" hidden></pre>
+</section>
 <p id="saved" class="note" aria-live="polite"></p>
 <script src="i18n.js"></script>
 <script src="record-core.js"></script>

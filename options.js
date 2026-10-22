@@ -218,5 +218,33 @@ $("sessEnd").addEventListener("click", async () => {
   say(shzT(session.prev === true ? "sessEndedKeep" : "sessEndedOff"));
 });
 
-chrome.storage.onChanged.addListener((c, area) => { if (area === "local") scheduleRender(); });
+// 動作ログ（log.js が X のタブで書く）。表示・コピー・消去
+const dbg = $("debugEnabled");
+const logLine = (e) => `${new Date(e.t).toLocaleTimeString()} [${e.tab}] ${e.src} ${e.ev}${e.d === undefined ? "" : " " + JSON.stringify(e.d)}`;
+function showLog(log) {
+  const lines = (log || []).map(logLine);
+  $("logCount").textContent = shzT("logCount", { n: lines.length });
+  const view = $("logView");
+  view.textContent = lines.slice(-100).join("\n");
+  view.hidden = !lines.length;
+  view.scrollTop = view.scrollHeight;
+}
+chrome.storage.local.get({ debugEnabled: false, debugLog: [] }, (v) => { dbg.checked = v.debugEnabled === true; showLog(v.debugLog); });
+dbg.addEventListener("change", () => chrome.storage.local.set({ debugEnabled: dbg.checked }));
+chrome.storage.onChanged.addListener((c, area) => { if (area === "local" && c.debugLog) showLog(c.debugLog.newValue); });
+$("logCopy").addEventListener("click", async () => {
+  const { debugLog } = await chrome.storage.local.get({ debugLog: [] });
+  const head = `osusume-kenon ${chrome.runtime?.getManifest?.().version ?? "?"} / ${navigator.userAgent}`;
+  await navigator.clipboard.writeText([head, ...debugLog.map(logLine)].join("\n"));
+  say(shzT("logCopied"));
+});
+$("logClear").addEventListener("click", async () => {
+  await chrome.storage.local.remove("debugLog");
+  showLog([]);
+  say(shzT("logCleared"));
+});
+
+chrome.storage.onChanged.addListener((c, area) => { // ログ・診断の書き込みだけなら、表は描き直さない
+  if (area === "local" && Object.keys(c).some((k) => k !== "debugLog" && k !== "foldDiag")) scheduleRender();
+});
 shzApplyPurge().then(render); // 期限の来た記録を片付ける。オフのままでも、設定画面を開いたときに行う
