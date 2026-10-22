@@ -1,22 +1,22 @@
-# 拡張のアイコン(体温計)を作る。python tools/make-icons.py で icons/ に 16/32/48/128 を書き出す
+# 拡張のアイコン(斜めの電子体温計)を作る。python tools/make-icons.py で icons/ に 16/32/48/128 を書き出す
 from PIL import Image, ImageDraw
 S = 1024  # 大きく描いて縮める
 def draw():
-    im = Image.new("RGBA", (S, S), (0, 0, 0, 0))
-    d = ImageDraw.Draw(im)
-    d.rounded_rectangle([0, 0, S - 1, S - 1], radius=int(S * 0.22), fill=(29, 42, 53, 255))
-    white, red = (240, 244, 247, 255), (233, 84, 62, 255)
-    cx = S // 2
-    # 管(外枠): 白
-    d.rounded_rectangle([cx - 110, 130, cx + 110, 700], radius=110, fill=white)
-    d.ellipse([cx - 230, 540, cx + 230, 1000 - 60], fill=white)
-    # 水銀: 赤(球 + 柱)
-    d.ellipse([cx - 160, 610, cx + 160, 930], fill=red)
-    d.rounded_rectangle([cx - 52, 330, cx + 52, 700], radius=52, fill=red)
-    # 目盛り
-    for y in (210, 270, 330):
-        d.rectangle([cx + 150, y - 10, cx + 250, y + 10], fill=white)
-    return im
+    bg = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+    ImageDraw.Draw(bg).rounded_rectangle([0, 0, S - 1, S - 1], radius=int(S * 0.22), fill=(29, 42, 53, 255))
+    # 体温計を横向きに描いて、斜めに回す
+    L = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+    d = ImageDraw.Draw(L)
+    white, red, dark, metal = (240, 244, 247, 255), (233, 84, 62, 255), (29, 42, 53, 255), (170, 182, 192, 255)
+    cy = S // 2
+    d.rounded_rectangle([80, cy - 105, 760, cy + 105], radius=70, fill=white)          # 本体
+    d.polygon([(740, cy - 62), (960, cy - 18), (960, cy + 18), (740, cy + 62)], fill=metal)  # 先(細い金属)
+    d.rounded_rectangle([170, cy - 62, 520, cy + 62], radius=24, fill=dark)             # 表示窓
+    d.rounded_rectangle([190, cy - 42, 340, cy + 42], radius=14, fill=red)              # 表示(赤)
+    d.ellipse([590, cy - 40, 670, cy + 40], fill=red)                                   # ボタン
+    L = L.rotate(45, resample=Image.BICUBIC, center=(S // 2, S // 2))
+    bg.alpha_composite(L)
+    return bg
 big = draw()
 for n in (16, 32, 48, 128):
     big.resize((n, n), Image.LANCZOS).save(f"icons/icon{n}.png")
