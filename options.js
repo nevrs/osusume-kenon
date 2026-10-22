@@ -37,7 +37,7 @@ fold.addEventListener("change", () => {
 });
 function showFold(d) { $("foldCount").textContent = d && d.d === shzDay(Date.now()) ? shzT("foldToday", { n: d.n }) : ""; }
 function showDiag(g) {
-  $("foldDiag").textContent = g ? shzT("foldDiag", { ...g, at: new Date(g.at || g.since).toLocaleString(), avg: g.judged ? (g.ms / g.judged / 1000).toFixed(1) : "—" }) : "";
+  $("foldDiag").textContent = g ? shzT("foldDiag", { ...g, at: new Date(g.at || g.since).toLocaleString(), errText: g.err ? shzT("foldDiagErr", { err: g.err }) : "", avg: g.judged ? (g.ms / g.judged / 1000).toFixed(1) : "—" }) : "";
 }
 chrome.storage.onChanged.addListener((c, area) => {
   if (area !== "local") return;

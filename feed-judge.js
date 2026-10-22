@@ -30,7 +30,10 @@ async function shzFjMakeBase() {
   return LanguageModel.create({ ...SHZ_FJ_LANG, initialPrompts: [{ role: "system", content: SHZ_FJ_SYSTEM }] });
 }
 
-// 1 件を判定して {a, h} を返す。組み込み AI が使えなければ null、その 1 件だけが失敗したら {failed: true}
+// 失敗の理由（エラーの種類と文。本文は入れない。診断に出す）
+const shzFjErr = (e) => `${e?.name || "Error"}: ${e?.message || e}`.slice(0, 160);
+
+// 1 件を判定して {a, h} を返す。組み込み AI が使えなければ null、その 1 件だけが失敗したら {failed: true, err}
 async function shzFeedJudge(text) {
   if (typeof LanguageModel === "undefined") return null;
   const pending = (shzFjBase ??= shzFjMakeBase());
@@ -54,10 +57,10 @@ async function shzFeedJudge(text) {
   }
   try {
     const o = JSON.parse(await s.prompt(`投稿:\n${text}`, { responseConstraint: SHZ_FJ_SCHEMA }));
-    if (!Number.isFinite(o.anger) || !Number.isFinite(o.hostility)) return { failed: true };
+    if (!Number.isFinite(o.anger) || !Number.isFinite(o.hostility)) return { failed: true, err: "点が数でない" };
     return { a: Math.round(o.anger), h: Math.round(o.hostility) };
-  } catch {
-    return { failed: true }; // この 1 件だけの失敗（長すぎる本文など）。元は壊さない
+  } catch (e) {
+    return { failed: true, err: shzFjErr(e) }; // この 1 件だけの失敗（長すぎる本文など）。元は壊さない
   } finally {
     s?.destroy();
   }

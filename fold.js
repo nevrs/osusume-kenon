@@ -23,7 +23,7 @@ const shzFoldOpened = new Set(); // 本人が「開く」を押した投稿の I
 const shzFoldQueue = new Set(); // 判定待ちの投稿の要素
 const shzFoldCounted = new Set(); // 今日の件数に数えた投稿の ID
 // 診断（設定画面に出す）。最後に書いた X のタブの、ページを読み込んでからの数だけ（タブが複数あれば上書きし合う）。本文・ID は入れない。たたむ機能をオフにすると消す
-const shzFoldDiag = { since: Date.now(), pending: 0, judged: 0, ms: 0, maxH: 0, late: 0, failed: 0, aiOff: 0, folded: 0 };
+const shzFoldDiag = { since: Date.now(), pending: 0, judged: 0, ms: 0, maxH: 0, late: 0, failed: 0, aiOff: 0, folded: 0, err: "" };
 let shzFoldDiagTimer = 0;
 function shzFoldDiagSave() {
   if (shzFoldDiagTimer) return;
@@ -127,7 +127,11 @@ async function shzFoldPump() {
       const t0 = Date.now();
       const res = id && text ? await shzFeedJudge(text) : { failed: true };
       if (res && !res.failed) { shzFoldDiag.maxH = Math.max(shzFoldDiag.maxH, res.h); shzFoldDiag.ms += Date.now() - t0; shzFoldNote("judged"); }
-      else shzFoldNote(res === null ? "aiOff" : "failed");
+      else {
+        if (res?.err) shzFoldDiag.err = res.err;
+        else if (res && !(id && text)) shzFoldDiag.err = "判定の前に、投稿の本文か ID が読めなくなった";
+        shzFoldNote(res === null ? "aiOff" : "failed");
+      }
       if (id && res && !res.failed) shzFoldResult.set(id, res.h); // 間に合わずに見せたあとでも覚える（X が要素を作り直したとき、また空白にしない）
       if (id && res?.failed) shzFoldResult.set(id, 0); // 失敗した投稿も、繰り返し試さない
       if (!shzFoldOn || !next.isConnected || next.getAttribute(SHZ_FOLD_ATTR) !== "pending") continue; // 待っているあいだに、オフ・間に合わず表示・要素の消去
