@@ -2,7 +2,12 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { parseCount, parseActionLabel, countsOf } = require("../tools/x-counts.js");
-const fixture = require("./fixtures/ja-home-2026-10-20.json");
+// 実機で確かめた形（返信が 0 件のとき、文から返信が抜ける）を写した、作り物の例。実機の数は公開していない
+const fixture = { rows: [
+  { label: "12 件の返信、340 件のリポスト、5100 件のいいね、210 件のブックマーク、98000 件の表示", replyButton: 12 },
+  { label: "3 件の返信、20 件のリポスト、150 件のいいね、4 件のブックマーク、2500 件の表示", replyButton: 3 },
+  { label: "30 件のリポスト、200 件のいいね、25 件のブックマーク、9000 件の表示", replyButton: 0 },
+] };
 
 test("parseCount", () => {
   assert.equal(parseCount("1,234"), 1234);
@@ -39,7 +44,7 @@ test("parseActionLabel: 数の無い文は null", () => {
   assert.equal(parseActionLabel(null), null);
 });
 
-test("実機の X（日本語のおすすめ 45 件）: すべて読め、返信数が返信ボタンの数と一致する", () => {
+test("日本語の数の行の例: すべて読め、返信数が返信ボタンの数と一致する（返信が文に無ければ 0）", () => {
   for (const { label, replyButton } of fixture.rows) {
     const c = countsOf(label, "ja");
     assert.ok(c, label);
