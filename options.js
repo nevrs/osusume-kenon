@@ -16,7 +16,7 @@ function applyLang() {
   document.documentElement.lang = shzLang;
   for (const el of document.querySelectorAll("[data-i18n]")) setRich(el, shzT(el.dataset.i18n));
   document.title = shzT("title");
-  chrome.storage.local.get({ foldDay: null }, (v) => showFold(v.foldDay));
+  chrome.storage.local.get({ foldDay: null, foldDiag: null }, (v) => { showFold(v.foldDay); showDiag(v.foldDiag); });
   render();
 }
 const langSel = $("lang");
@@ -36,7 +36,14 @@ fold.addEventListener("change", () => {
   chrome.storage.local.set({ foldEnabled: fold.checked }, () => say(shzT(fold.checked ? "foldOn" : "foldOff")));
 });
 function showFold(d) { $("foldCount").textContent = d && d.d === shzDay(Date.now()) ? shzT("foldToday", { n: d.n }) : ""; }
-chrome.storage.onChanged.addListener((c, area) => { if (area === "local" && c.foldDay) showFold(c.foldDay.newValue); });
+function showDiag(g) {
+  $("foldDiag").textContent = g ? shzT("foldDiag", { ...g, at: new Date(g.at || g.since).toLocaleString(), avg: g.judged ? (g.ms / g.judged / 1000).toFixed(1) : "—" }) : "";
+}
+chrome.storage.onChanged.addListener((c, area) => {
+  if (area !== "local") return;
+  if (c.foldDay) showFold(c.foldDay.newValue);
+  if (c.foldDiag) showDiag(c.foldDiag.newValue);
+});
 chrome.storage.local.remove("pauseEnabled"); // 削除した一呼吸の設定が残っていれば消す
 const rec = $("recordEnabled");
 chrome.storage.local.get({ recordEnabled: false }, (v) => { rec.checked = v.recordEnabled === true; });

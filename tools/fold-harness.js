@@ -89,7 +89,7 @@ const check = (name, ok, detail) => results.push(`${ok ? "OK" : "NG"}  ${name}${
   check("広告・本文の無い投稿には、何もしない", t.st("3") === null && t.st("4") === null);
   check("1 件だけ判定に失敗した投稿は、たたまずに見せる", t.st("5") === "open");
   check("問いは「投稿:」と本文だけ", t.calls.prompts.every((p) => p.startsWith("投稿:\n")) && t.calls.prompts.length === 3, JSON.stringify(t.calls.prompts));
-  check("保存するのは今日の件数（foldDay）だけで、本文は保存しない", t.writes.every((k) => k === "foldDay") && JSON.stringify(t.store).includes("馬鹿") === false && t.store.foldDay?.n === 1, JSON.stringify([t.writes, t.store.foldDay]));
+  check("保存するのは今日の件数（foldDay）と診断の数（foldDiag）だけで、本文は保存しない", t.writes.every((k) => k === "foldDay" || k === "foldDiag") && JSON.stringify(t.store).includes("馬鹿") === false && t.store.foldDay?.n === 1, JSON.stringify([t.writes, t.store.foldDay]));
 
   // 開く（X の側の「投稿を開く」まで、クリックが届かない）
   let reached = 0;

@@ -22,6 +22,14 @@ const shzFoldVerdict = (h) => (h >= shzFoldStrong ? "fold" : "show");
 const shzFoldOpened = new Set(); // 本人が「開く」を押した投稿の ID
 const shzFoldQueue = new Set(); // 判定待ちの投稿の要素
 const shzFoldCounted = new Set(); // 今日の件数に数えた投稿の ID
+// 診断（設定画面に出す）。最後に書いた X のタブの、ページを読み込んでからの数だけ（タブが複数あれば上書きし合う）。本文・ID は入れない。たたむ機能をオフにすると消す
+const shzFoldDiag = { since: Date.now(), pending: 0, judged: 0, ms: 0, maxH: 0, late: 0, failed: 0, aiOff: 0, folded: 0 };
+let shzFoldDiagTimer = 0;
+function shzFoldDiagSave() {
+  if (shzFoldDiagTimer) return;
+  shzFoldDiagTimer = setTimeout(() => { shzFoldDiagTimer = 0; chrome.storage.local.set({ foldDiag: { ...shzFoldDiag, at: Date.now() } }); }, 2000);
+}
+const shzFoldNote = (k, n = 1) => { shzFoldDiag[k] += n; shzFoldDiagSave(); };
 
 function shzFoldStyle() {
   if (document.getElementById("shizume-fold-style")) return;
@@ -70,6 +78,7 @@ function shzFoldApply(article, id, verdict) {
     shzFoldHide(article, id);
     if (id && !shzFoldCounted.has(id)) {
       shzFoldCounted.add(id);
+      shzFoldNote("folded");
       shzFoldCount();
     }
   } else shzFoldShow(article);
@@ -96,9 +105,10 @@ function shzFoldWatch(article) {
   if (known !== undefined) return shzFoldApply(article, id, shzFoldVerdict(known));
   if (Date.now() < shzFoldAiOffUntil) return; // AI が使えないあいだは、たたまない
   article.setAttribute(SHZ_FOLD_ATTR, "pending");
+  shzFoldNote("pending");
   shzFoldQueue.add(article);
   setTimeout(() => { // 間に合わなければ見せる
-    if (article.getAttribute(SHZ_FOLD_ATTR) === "pending") { shzFoldQueue.delete(article); shzFoldShow(article); }
+    if (article.getAttribute(SHZ_FOLD_ATTR) === "pending") { shzFoldQueue.delete(article); shzFoldShow(article); shzFoldNote("late"); }
   }, SHZ_FOLD.waitMs);
   shzFoldPump();
 }
@@ -114,7 +124,10 @@ async function shzFoldPump() {
       shzFoldQueue.delete(next);
       if (!next.isConnected || next.getAttribute(SHZ_FOLD_ATTR) !== "pending") continue;
       const id = shzPostId(next), text = shzPostText(next);
+      const t0 = Date.now();
       const res = id && text ? await shzFeedJudge(text) : { failed: true };
+      if (res && !res.failed) { shzFoldDiag.maxH = Math.max(shzFoldDiag.maxH, res.h); shzFoldDiag.ms += Date.now() - t0; shzFoldNote("judged"); }
+      else shzFoldNote(res === null ? "aiOff" : "failed");
       if (id && res && !res.failed) shzFoldResult.set(id, res.h); // 間に合わずに見せたあとでも覚える（X が要素を作り直したとき、また空白にしない）
       if (id && res?.failed) shzFoldResult.set(id, 0); // 失敗した投稿も、繰り返し試さない
       if (!shzFoldOn || !next.isConnected || next.getAttribute(SHZ_FOLD_ATTR) !== "pending") continue; // 待っているあいだに、オフ・間に合わず表示・要素の消去
@@ -158,6 +171,9 @@ function shzFoldStop() {
   shzFoldQueue.clear();
   for (const a of document.querySelectorAll(`[${SHZ_FOLD_ATTR}]`)) shzFoldClear(a); // オフにしたら、すべて元に戻す
   document.getElementById("shizume-fold-style")?.remove();
+  clearTimeout(shzFoldDiagTimer);
+  shzFoldDiagTimer = 0;
+  chrome.storage.local.remove("foldDiag");
 }
 
 shzLoadLang(() => { // 言語が変わったら、出ている札の文も替える
