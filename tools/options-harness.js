@@ -11,7 +11,7 @@ function setup(stored = {}) {
   const html = fs.readFileSync(path.join(repo, "options.html"), "utf8").replace(/<script[^>]*><\/script>/g, "");
   const dom = new JSDOM(html, { runScripts: "outside-only", pretendToBeVisual: true });
   const w = dom.window;
-  const store = JSON.parse(JSON.stringify(stored));
+  const store = JSON.parse(JSON.stringify({ lang: "ja", ...stored }));
   const listeners = [];
   const copy = (v) => JSON.parse(JSON.stringify(v));
   const notify = (keys) => { const c = Object.fromEntries(keys.map((k) => [k, { newValue: store[k] }])); for (const f of listeners) f(c, "local"); };
@@ -27,7 +27,7 @@ function setup(stored = {}) {
     },
     onChanged: { addListener: (f) => listeners.push(f) },
   } };
-  w.eval(["record-core.js", "stats-core.js", "options.js"].map((f) => fs.readFileSync(path.join(repo, f), "utf8")).join(";\n"));
+  w.eval(["i18n.js", "record-core.js", "stats-core.js", "options.js"].map((f) => fs.readFileSync(path.join(repo, f), "utf8")).join(";\n"));
   const d = w.document;
   const text = (id) => d.getElementById(id).textContent;
   return { w, d, store, text, click: (id) => d.getElementById(id).click() };

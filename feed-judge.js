@@ -18,7 +18,7 @@ const SHZ_FJ_HOSTILITY = "特定の人や集団に向けた敵意・侮辱・見
 const SHZ_FJ_SYSTEM = "あなたは SNS の投稿を読み、次の各項目に当てはまる度合いを 0〜100 の整数で答える。100 は非常に強い、0 はまったく無い。\n" +
   `anger: ${SHZ_FJ_ANGER}\nhostility: ${SHZ_FJ_HOSTILITY}`;
 const SHZ_FJ_SCHEMA = { type: "object", properties: { anger: SHZ_FJ_SCORE, hostility: SHZ_FJ_SCORE }, required: ["anger", "hostility"] };
-const SHZ_FJ_LANG = { expectedInputs: [{ type: "text", languages: ["ja"] }], expectedOutputs: [{ type: "text", languages: ["ja"] }] };
+const SHZ_FJ_LANG = { expectedInputs: [{ type: "text", languages: ["ja", "en"] }], expectedOutputs: [{ type: "text", languages: ["ja"] }] };
 
 const shzFjTab = Math.random().toString(36).slice(2); // このタブの印（判定を同時に回さないため）
 let shzFjBase = null; // 問いを読ませた元のやりとり（の約束）。文ごとに複製して使う

@@ -4,7 +4,7 @@
 // 札の「開く」は、本人が押す。組み込み AI が使えない・判定が間に合わないときは、たたまずに見せる（見せる側に倒す）。
 
 const SHZ_FOLD = {
-  strong: 70, // 敵意がこの点以上でたたむ（設定画面の「強い」と同じ）
+  strong: 70, // 敵意がこの点以上でたたむ（初期値。設定画面で 70 / 40 / 20 から選べる。集計の「強い」の 70 とは別）
   waitMs: 6000, // 判定を待つ上限。過ぎたら見せる
   aiOffMs: 60_000, // 組み込み AI が使えなかったら、この間は先にたたまない
 };
@@ -16,7 +16,9 @@ let shzFoldOn = false;
 let shzFoldObserver = null;
 let shzFoldAiOffUntil = 0;
 let shzFoldRunning = false;
-const shzFoldResult = new Map(); // 投稿の ID → "fold" / "show"（判定済み。X が要素を作り直しても、同じ結果を使う）
+const shzFoldResult = new Map(); // 投稿の ID → 敵意の点（判定済み。X が要素を作り直しても、同じ結果を使う。たたむ基準を変えても、判定し直さない）
+let shzFoldStrong = SHZ_FOLD.strong; // いまのたたむ基準（設定画面で変えられる。初期値は 70）
+const shzFoldVerdict = (h) => (h >= shzFoldStrong ? "fold" : "show");
 const shzFoldOpened = new Set(); // 本人が「開く」を押した投稿の ID
 const shzFoldQueue = new Set(); // 判定待ちの投稿の要素
 const shzFoldCounted = new Set(); // 今日の件数に数えた投稿の ID
@@ -49,10 +51,11 @@ function shzFoldHide(article, id) {
   const box = document.createElement("div");
   box.className = SHZ_FOLD_BOX;
   const label = document.createElement("span");
-  label.textContent = "敵意の強い投稿を 1 件たたみました";
+  label.className = `${SHZ_FOLD_BOX}-label`;
+  label.textContent = shzT("foldBox");
   const btn = document.createElement("button");
   btn.type = "button";
-  btn.textContent = "開く";
+  btn.textContent = shzT("foldOpen");
   box.addEventListener("click", (e) => e.stopPropagation()); // X の「投稿を開く」（詳細ページへ移る）まで届かせない
   btn.addEventListener("click", () => {
     if (id) shzFoldOpened.add(id);
@@ -90,7 +93,7 @@ function shzFoldWatch(article) {
   }
   article.setAttribute(SHZ_FOLD_ID, id);
   const known = shzFoldResult.get(id);
-  if (known) return shzFoldApply(article, id, known);
+  if (known !== undefined) return shzFoldApply(article, id, shzFoldVerdict(known));
   if (Date.now() < shzFoldAiOffUntil) return; // AI が使えないあいだは、たたまない
   article.setAttribute(SHZ_FOLD_ATTR, "pending");
   shzFoldQueue.add(article);
@@ -112,8 +115,8 @@ async function shzFoldPump() {
       if (!next.isConnected || next.getAttribute(SHZ_FOLD_ATTR) !== "pending") continue;
       const id = shzPostId(next), text = shzPostText(next);
       const res = id && text ? await shzFeedJudge(text) : { failed: true };
-      if (id && res && !res.failed) shzFoldResult.set(id, res.h >= SHZ_FOLD.strong ? "fold" : "show"); // 間に合わずに見せたあとでも覚える（X が要素を作り直したとき、また空白にしない）
-      if (id && res?.failed) shzFoldResult.set(id, "show"); // 失敗した投稿も、繰り返し試さない
+      if (id && res && !res.failed) shzFoldResult.set(id, res.h); // 間に合わずに見せたあとでも覚える（X が要素を作り直したとき、また空白にしない）
+      if (id && res?.failed) shzFoldResult.set(id, 0); // 失敗した投稿も、繰り返し試さない
       if (!shzFoldOn || !next.isConnected || next.getAttribute(SHZ_FOLD_ATTR) !== "pending") continue; // 待っているあいだに、オフ・間に合わず表示・要素の消去
       if (res === null) { // 組み込み AI が使えない。待っている分も見せる
         shzFoldAiOffUntil = Date.now() + SHZ_FOLD.aiOffMs;
@@ -123,7 +126,7 @@ async function shzFoldPump() {
         continue;
       }
       if (res.failed) { shzFoldShow(next); continue; }
-      shzFoldApply(next, id, shzFoldResult.get(id));
+      shzFoldApply(next, id, shzFoldVerdict(shzFoldResult.get(id)));
     }
   } finally {
     shzFoldRunning = false;
@@ -157,9 +160,19 @@ function shzFoldStop() {
   document.getElementById("shizume-fold-style")?.remove();
 }
 
-chrome.storage.local.get({ foldEnabled: false }, (v) => { if (v.foldEnabled === true) shzFoldStart(); });
+shzLoadLang(() => { // 言語が変わったら、出ている札の文も替える
+  for (const l of document.querySelectorAll(`.${SHZ_FOLD_BOX}-label`)) l.textContent = shzT("foldBox");
+  for (const b of document.querySelectorAll(`.${SHZ_FOLD_BOX} button`)) b.textContent = shzT("foldOpen");
+});
+const shzFoldLevel = (n) => (Number.isFinite(n) && n >= 10 && n <= 90 ? n : SHZ_FOLD.strong);
+chrome.storage.local.get({ foldEnabled: false, foldThreshold: SHZ_FOLD.strong }, (v) => { shzFoldStrong = shzFoldLevel(v.foldThreshold); if (v.foldEnabled === true) shzFoldStart(); });
 chrome.storage.onChanged.addListener((c, area) => {
-  if (area !== "local" || !c.foldEnabled) return;
+  if (area !== "local") return;
+  if (c.foldThreshold) { // たたむ基準が変わった。判定済みの点はそのまま、基準だけ当て直す
+    shzFoldStrong = shzFoldLevel(c.foldThreshold.newValue);
+    if (shzFoldOn) { shzFoldStop(); shzFoldStart(); }
+  }
+  if (!c.foldEnabled) return;
   if (c.foldEnabled.newValue === true) shzFoldStart();
   else shzFoldStop();
 });

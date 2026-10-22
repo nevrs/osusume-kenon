@@ -21,10 +21,10 @@ const page = (tab, body) => `<body>
 const POSTS = [article("1", "馬鹿じゃないの"), article("2", "いい天気ですね"), article("3", "広告の馬鹿", `<span>広告</span>`), article("4", null), article("5", "壊れる投稿")].join("");
 
 // 偽の AI: 「馬鹿」を含めば 敵意 90、それ以外は 0。「壊れる」は 1 件だけ失敗
-function setup({ tab = "おすすめ", body = POSTS, foldEnabled = false, aiDelay = 0, noAI = false, waitMs = 6000, aiOffMs = 60000 } = {}) {
+function setup({ tab = "おすすめ", body = POSTS, foldEnabled = false, aiDelay = 0, noAI = false, lang = "ja", waitMs = 6000, aiOffMs = 60000 } = {}) {
   const dom = new JSDOM(page(tab, body), { url: "https://x.com/home", runScripts: "outside-only", pretendToBeVisual: true });
   const w = dom.window;
-  const store = { foldEnabled };
+  const store = { foldEnabled, lang };
   const writes = [];
   const listeners = [];
   const calls = { prompts: [] };
@@ -58,7 +58,7 @@ function setup({ tab = "おすすめ", body = POSTS, foldEnabled = false, aiDela
   fold = swap(fold, "waitMs: 6000", `waitMs: ${waitMs}`);
   fold = swap(fold, "aiOffMs: 60_000", `aiOffMs: ${aiOffMs}`);
   const fj = swap(fs.readFileSync(path.join(repo, "feed-judge.js"), "utf8"), "startDelayMs: 8000", "startDelayMs: 100000000");
-  w.eval([fs.readFileSync(path.join(repo, "x-dom.js"), "utf8"), fs.readFileSync(path.join(repo, "record-core.js"), "utf8"), fj, fold].join(";\n"));
+  w.eval([fs.readFileSync(path.join(repo, "x-dom.js"), "utf8"), fs.readFileSync(path.join(repo, "record-core.js"), "utf8"), fs.readFileSync(path.join(repo, "i18n.js"), "utf8"), fj, fold].join(";\n"));
   const d = w.document;
   const art = (id) => [...d.querySelectorAll("article")].find((a) => a.querySelector(`a[href$="/status/${id}"]`));
   const st = (id) => art(id)?.getAttribute("data-shizume-fold");
@@ -153,6 +153,11 @@ const check = (name, ok, detail) => results.push(`${ok ? "OK" : "NG"}  ${name}${
   await wait(400);
   check("X が同じ要素に別の投稿を入れたら、前の印を捨てて判定し直す（別の投稿を隠したままにしない）", a1.getAttribute("data-shizume-fold") === "open" && !a1.querySelector(".shizume-fold-box"), String(a1.getAttribute("data-shizume-fold")));
 
+  // 英語
+  t = setup({ foldEnabled: true, lang: "en", body: article("1", "馬鹿じゃないの") });
+  await wait(400);
+  const eb = t.art("1").querySelector(".shizume-fold-box");
+  check("言語が英語なら、札も英語で出す", !!eb && eb.textContent.includes("1 hostile post folded") && eb.querySelector("button").textContent === "Open", eb && eb.textContent);
   // AI が使えない
   t = setup({ foldEnabled: true, noAI: true });
   await wait(300);
@@ -162,8 +167,8 @@ const check = (name, ok, detail) => results.push(`${ok ? "OK" : "NG"}  ${name}${
   check("AI が使えないと分かったあと、しばらくは先に隠さない", t.st("8") === null);
 
   // 設定画面の項目
-  const html2 = fs.readFileSync(path.join(repo, "options.html"), "utf8");
-  check("設定画面にチェックがあり、初期値はオフと書いてある", /id="foldEnabled"/.test(html2) && /敵意の強い投稿をたたむ（試験）<\/strong>（初期値はオフ）/.test(html2));
+  const html2 = fs.readFileSync(path.join(repo, "options.html"), "utf8"), i18n = fs.readFileSync(path.join(repo, "i18n.js"), "utf8");
+  check("設定画面にチェックがあり、初期値はオフと書いてある（日本語・英語とも）", /id="foldEnabled"/.test(html2) && /foldLabel: "\*\*敵意の強い投稿をたたむ（試験）\*\*（初期値はオフ）"/.test(i18n) && /foldLabel: "\*\*Fold hostile posts \(experimental\)\*\* \(off by default\)"/.test(i18n));
   const src = fs.readFileSync(path.join(repo, "fold.js"), "utf8");
   check("fold.js は innerHTML を使わず、X のボタンを押さない（.click() を呼ばない）", !/innerHTML|insertAdjacentHTML/.test(src) && !/\.click\(\)/.test(src));
 

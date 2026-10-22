@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>おすすめ検温の設定</title>
+<title>Osusume Kenon</title>
 <style>
   body { font: 15px/1.7 system-ui, sans-serif; max-width: 640px; margin: 24px auto; padding: 0 16px; color: #1d2a35; }
   label { display: flex; gap: 10px; align-items: flex-start; }
@@ -20,48 +20,47 @@
 </style>
 </head>
 <body>
-<h1>おすすめ検温の設定</h1>
+<h1 data-i18n="title"></h1>
+<p class="note"><label><span data-i18n="langLabel"></span> <select id="lang"><option value="auto" data-i18n="langAuto"></option><option value="ja">日本語</option><option value="en">English</option></select></label></p>
 <section>
-  <label><input type="checkbox" id="foldEnabled"> <span><strong>敵意の強い投稿をたたむ（試験）</strong>（初期値はオフ）</span></label>
-  <p class="note">「おすすめ」で、判定が終わるまで投稿を隠し、敵意が強いものは「たたみました」の札にします。「開く」はあなたが押します。判定が間に合わないときや AI が使えないときは、そのまま見せます。判定は誤ることがあり、正当な批判もたたまれることがあります。</p>
+  <label><input type="checkbox" id="foldEnabled"> <span data-i18n="foldLabel"></span></label>
+  <p class="note" data-i18n="foldNote"></p>
+  <p class="note"><label><span data-i18n="foldLevelLabel"></span> <select id="foldThreshold"><option value="70" data-i18n="foldLevelStd"></option><option value="40" data-i18n="foldLevelLow"></option><option value="20" data-i18n="foldLevelMin"></option></select></label></p>
   <p class="note" id="foldCount"></p>
 </section>
 <section>
-  <label><input type="checkbox" id="recordEnabled"> <span><strong>見せられた投稿の記録と判定</strong>（初期値はオフ）</span></label>
-  <p class="note">「おすすめ」「フォロー中」で見た投稿の本文を、端末の中にだけ残し、AI で「怒り」「敵意」の点を付けます。外へは送りません。
-    <strong>本文に書かれた他人のアカウント名や URL も残ります。</strong>本文は 14 日、点だけの記録は 1 年で消えます。</p>
-  <p class="note">いま残っている記録: <span id="recCount">…</span></p>
-  <p class="note"><button type="button" id="recStrip">本文だけ消す（判定済みの点は残す）</button><button type="button" id="recDelete">すべて消す</button></p>
+  <label><input type="checkbox" id="recordEnabled"> <span data-i18n="recLabel"></span></label>
+  <p class="note" data-i18n="recNote"></p>
+  <p class="note"><span data-i18n="recCountLabel"></span> <span id="recCount">…</span></p>
+  <p class="note"><button type="button" id="recStrip" data-i18n="recStrip"></button><button type="button" id="recDelete" data-i18n="recDelete"></button></p>
 </section>
 <section>
-  <h2>傾向（直近 14 日・目安）</h2>
+  <h2 data-i18n="trendH"></h2>
   <p class="note" id="trendNote">…</p>
   <table id="trendTable" hidden></table>
   <table id="dayTable" hidden></table>
-  <p class="note">目安です。精度は自作の例文で測ったもので、実際の投稿では外れることがあります。
-    <strong>差は、フォローした人の投稿と、X が選んだ投稿の違いです。アルゴリズムが押し上げた量ではありません。</strong></p>
+  <p class="note" data-i18n="trendFoot"></p>
 </section>
 <section>
-  <h2>測定モード（おすすめとフォロー中を比べる）</h2>
-  <p class="note">始めたら、「おすすめ」と「フォロー中」を、それぞれ 50 件ぶんほど<strong>あなた自身が</strong>眺めてください。shizume はスクロールしません。終わると記録の設定は元に戻ります。</p>
-  <p class="note"><button type="button" id="sessStart">測定を始める</button><button type="button" id="sessEnd" hidden>終了して結果を見る</button></p>
+  <h2 data-i18n="sessH"></h2>
+  <p class="note" data-i18n="sessNote"></p>
+  <p class="note"><button type="button" id="sessStart" data-i18n="sessStart"></button><button type="button" id="sessEnd" hidden data-i18n="sessEnd"></button></p>
   <p class="note" id="sessProgress"></p>
   <table id="sessTable" hidden></table>
   <p class="note" id="sessDiff"></p>
 </section>
 <section>
   <details>
-    <summary><strong>しくみ・使っている AI</strong></summary>
-    <p class="note"><strong>目的:</strong> X の「おすすめ」欄で表示される、アテンション（注目を集める）とエンゲージ（参戦させる）による刺激を軽くすること。
-      <strong>機能:</strong> 刺激の強い投稿を見えなくし（たたむ。開くのはあなた）、どの程度、怒りを刺激するコンテンツが流れてきているかを数値にします。
-      <strong>方法:</strong> 下の流れのとおり、端末の中の AI で投稿を判定します。</p>
-    <p class="note">判定には、Chrome に組み込まれた AI（Gemini Nano）を使います。パソコンの中で動くので、投稿の本文を外へ送りません。Chrome の AI が使えない端末では、記録だけで判定はされません。</p>
-    <p class="note">① 画面に 0.5 秒以上出た投稿の本文を、端末の中に残す。② AI が本文を読み、「怒り」と「敵意」を 0〜100 点で付ける。③ 70 点以上を「強い」と数え、「おすすめ」と「フォロー中」で、強い投稿の割合を比べる。</p>
-    <p class="note">「たたむ」は、同じ AI で、敵意が 70 点以上の「おすすめ」の投稿を隠します。判定が間に合わないときは隠さず見せます。</p>
-    <p class="note">AI は誤ります。正当な批判を「怒り」と読むこともあります。数字は目安で、2 つの画面の違いを示すだけです。</p>
+    <summary data-i18n="helpSummary"></summary>
+    <p class="note" data-i18n="help1"></p>
+    <p class="note" data-i18n="help2"></p>
+    <p class="note" data-i18n="help3"></p>
+    <p class="note" data-i18n="help4"></p>
+    <p class="note" data-i18n="help5"></p>
   </details>
 </section>
 <p id="saved" class="note" aria-live="polite"></p>
+<script src="i18n.js"></script>
 <script src="record-core.js"></script>
 <script src="stats-core.js"></script>
 <script src="options.js"></script>

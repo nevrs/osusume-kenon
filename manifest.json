@@ -1,15 +1,16 @@
 {
   "manifest_version": 3,
-  "name": "おすすめ検温",
-  "version": "0.7.0",
+  "name": "__MSG_extName__",
+  "version": "0.8.0",
   "icons": { "16": "icons/icon16.png", "32": "icons/icon32.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
-  "description": "X の「おすすめ」と「フォロー中」の、怒りと敵意の強い投稿の割合を、端末の中で測って比べます",
+  "description": "__MSG_extDesc__",
+  "default_locale": "ja",
   "permissions": ["storage", "unlimitedStorage"],
   "options_page": "options.html",
   "content_scripts": [
     {
       "matches": ["https://x.com/*"],
-      "js": ["x-dom.js", "record-core.js", "record.js", "feed-judge.js", "fold.js"],
+      "js": ["x-dom.js", "record-core.js", "i18n.js", "record.js", "feed-judge.js", "fold.js"],
       "run_at": "document_idle"
     }
   ]

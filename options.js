@@ -1,18 +1,41 @@
 // 設定画面。値は chrome.storage.local（この端末だけ）に置く
 const $ = (id) => document.getElementById(id);
 const say = (t) => { $("saved").textContent = t; };
-const FEED_LABEL = { "for-you": "おすすめ", following: "フォロー中" };
+const feedLabel = (f) => shzT(f === "for-you" ? "feedForYou" : "feedFollowing");
 const SESSION_TARGET = 50; // 測定モードで、それぞれの feed について集める件数
 
+// 文言を言語に合わせて入れる。**…** は太字（DOM で組む）
+function setRich(el, text) {
+  el.replaceChildren();
+  text.split("**").forEach((part, i) => {
+    if (!part) return;
+    if (i % 2) { const b = document.createElement("strong"); b.textContent = part; el.append(b); } else el.append(part);
+  });
+}
+function applyLang() {
+  document.documentElement.lang = shzLang;
+  for (const el of document.querySelectorAll("[data-i18n]")) setRich(el, shzT(el.dataset.i18n));
+  document.title = shzT("title");
+  chrome.storage.local.get({ foldDay: null }, (v) => showFold(v.foldDay));
+  render();
+}
+const langSel = $("lang");
+chrome.storage.local.get({ lang: "auto" }, (v) => { langSel.value = v.lang; });
+langSel.addEventListener("change", () => chrome.storage.local.set({ lang: langSel.value }));
+shzLoadLang(applyLang);
+
+const foldLevel = $("foldThreshold");
+chrome.storage.local.get({ foldThreshold: 70 }, (v) => { foldLevel.value = String(v.foldThreshold); });
+foldLevel.addEventListener("change", () => chrome.storage.local.set({ foldThreshold: Number(foldLevel.value) }));
 const fold = $("foldEnabled");
 chrome.storage.local.get({ foldEnabled: false, foldDay: null }, (v) => {
   fold.checked = v.foldEnabled === true;
   showFold(v.foldDay);
 });
 fold.addEventListener("change", () => {
-  chrome.storage.local.set({ foldEnabled: fold.checked }, () => say(fold.checked ? "たたむ機能をオンにしました" : "たたむ機能をオフにしました"));
+  chrome.storage.local.set({ foldEnabled: fold.checked }, () => say(shzT(fold.checked ? "foldOn" : "foldOff")));
 });
-function showFold(d) { $("foldCount").textContent = d && d.d === shzDay(Date.now()) ? `今日たたんだ投稿: ${d.n} 件` : ""; }
+function showFold(d) { $("foldCount").textContent = d && d.d === shzDay(Date.now()) ? shzT("foldToday", { n: d.n }) : ""; }
 chrome.storage.onChanged.addListener((c, area) => { if (area === "local" && c.foldDay) showFold(c.foldDay.newValue); });
 chrome.storage.local.remove("pauseEnabled"); // 削除した一呼吸の設定が残っていれば消す
 const rec = $("recordEnabled");
@@ -22,11 +45,11 @@ rec.addEventListener("change", async () => {
   if (session && !session.end) {
     // 測定中に本人が切り替えた。オフなら測定をここで終える。オンなら、終えたあともオンのままにする（本人の選んだ設定を、終了時に上書きしない）
     await chrome.storage.local.set(rec.checked ? { recordEnabled: true, session: { ...session, prev: true } } : { recordEnabled: false, session: { ...session, end: Date.now() } });
-    say(rec.checked ? "記録をオンにしました（測定を終えても、オンのままにします）" : "記録と判定をオフにしました。測定もここで終えました（すでにある記録は残っています）");
+    say(shzT(rec.checked ? "recOnSession" : "recOffSession"));
     return;
   }
   await chrome.storage.local.set({ recordEnabled: rec.checked });
-  say(rec.checked ? "記録と判定をオンにしました" : "記録と判定をオフにしました（すでにある記録は残っています）");
+  say(shzT(rec.checked ? "recOnMsg" : "recOffMsg"));
 });
 chrome.storage.onChanged.addListener((c, area) => {
   if (area === "local" && c.recordEnabled) rec.checked = c.recordEnabled.newValue === true; // 測定モードの開始・終了で変わる
@@ -49,7 +72,7 @@ const pct = (share) => (share === null ? null : `${Math.round(share * 100)}%`);
 // 割合のセル。件数が足りなければ「—」。bar があれば棒を付ける
 function shareCell(tr, count, judged, barClass) {
   const share = shzShare(count, judged);
-  const td = cell(tr, share === null ? `— (${judged}件)` : pct(share), share === null ? "muted" : "");
+  const td = cell(tr, share === null ? shzT("judgedN", { n: judged }) : pct(share), share === null ? "muted" : "");
   if (share !== null && barClass) {
     const bar = document.createElement("span");
     bar.className = `bar ${barClass}`;
@@ -61,18 +84,18 @@ function shareCell(tr, count, judged, barClass) {
 // おすすめとフォロー中の差（敵意が強い割合）の文。比べられないときは理由
 function diffText(t) {
   const a = shzShare(t["for-you"].hostile, t["for-you"].judged), b = shzShare(t.following.hostile, t.following.judged);
-  if (a === null || b === null) return `比べるには、おすすめとフォロー中の判定済みがそれぞれ ${SHZ_MIN_N} 件以上要ります（いま ${t["for-you"].judged} 件・${t.following.judged} 件）。`;
+  if (a === null || b === null) return shzT("diffNeed", { min: SHZ_MIN_N, a: t["for-you"].judged, b: t.following.judged });
   const d = Math.round((a - b) * 100);
-  const word = d > 0 ? `おすすめのほうが ${d} ポイント高い` : d < 0 ? `おすすめのほうが ${-d} ポイント低い` : "差はありません";
-  return `敵意が強い投稿の割合: おすすめ ${pct(a)}・フォロー中 ${pct(b)}。${word}（目安。フォロー中との差であって、アルゴリズムが押し上げた量ではありません）。`;
+  const word = d > 0 ? shzT("diffHigher", { d }) : d < 0 ? shzT("diffLower", { d: -d }) : shzT("diffSame");
+  return shzT("diffText", { a: pct(a), b: pct(b), word });
 }
 
 function tallyTable(table, t, withBar) {
   table.replaceChildren();
-  header(table, ["", "記録", "判定済み", "敵意が強い", "怒りが強い"]);
+  header(table, ["", shzT("thSeen"), shzT("thJudged"), shzT("thHostile"), shzT("thAngry")]);
   for (const f of SHZ_FEEDS) {
     const tr = document.createElement("tr");
-    cell(tr, FEED_LABEL[f]);
+    cell(tr, feedLabel(f));
     cell(tr, String(t[f].seen));
     cell(tr, String(t[f].judged));
     shareCell(tr, t[f].hostile, t[f].judged, withBar ? f : "");
@@ -86,15 +109,15 @@ function renderCount(recs) {
   const s = shzSummarize(recs);
   const judged = Object.values(recs).filter(shzIsJudged).length;
   $("recCount").textContent = s.total
-    ? `${s.total} 件（おすすめ ${s.byFeed["for-you"] || 0}・フォロー中 ${s.byFeed.following || 0}）、うち判定済み ${judged} 件`
-    : "なし";
+    ? shzT("recCount", { total: s.total, fy: s.byFeed["for-you"] || 0, fl: s.byFeed.following || 0, judged })
+    : shzT("recNone");
 }
 
 function renderDays(recs) {
   const days = shzTallyByDay(recs);
   const dt = $("dayTable");
   dt.replaceChildren();
-  header(dt, ["日", "おすすめ（敵意が強い）", "フォロー中（敵意が強い）"]);
+  header(dt, [shzT("thDay"), shzT("thDayForYou"), shzT("thDayFollowing")]);
   for (const d of Object.keys(days).sort().reverse().slice(0, 14)) {
     const tr = document.createElement("tr");
     cell(tr, d);
@@ -107,7 +130,7 @@ function renderDays(recs) {
 function renderTrend(recs) {
   const note = $("trendNote");
   if (!Object.keys(recs).length) {
-    note.textContent = "まだ記録がありません。記録と判定をオンにして、X の「おすすめ」「フォロー中」を普通に眺めると、ここに出ます。";
+    note.textContent = shzT("trendEmpty");
     $("trendTable").hidden = $("dayTable").hidden = true;
     return;
   }
@@ -115,12 +138,12 @@ function renderTrend(recs) {
   const from = Date.now() - 14 * 86_400_000;
   const t = shzTally(recs, from);
   if (!SHZ_FEEDS.some((f) => t[f].seen)) {
-    note.textContent = "直近 14 日の記録がありません。";
+    note.textContent = shzT("trendNone14");
     $("trendTable").hidden = true;
     return;
   }
   const versions = shzVersions(Object.fromEntries(Object.entries(recs).filter(([, r]) => r.ts >= from)));
-  note.textContent = diffText(t) + (versions.length > 1 ? ` 判定の版が混ざっています（${versions.join("・")}）。点の付き方が違う記録を一緒に数えています。` : "");
+  note.textContent = diffText(t) + (versions.length > 1 ? shzT("versions", { v: versions.join(", ") }) : "");
   tallyTable($("trendTable"), t, false);
 }
 
@@ -133,12 +156,12 @@ function renderSession(session, recs) {
   diff.textContent = "";
   if (!session) { prog.textContent = ""; return; }
   const { tally, done } = shzSessionProgress(recs, session);
-  const line = SHZ_FEEDS.map((f) => `${FEED_LABEL[f]} ${tally[f].seen}/${session.targetEach}（判定済み ${tally[f].judged}）`).join("・");
+  const line = SHZ_FEEDS.map((f) => shzT("sessLine", { feed: feedLabel(f), seen: tally[f].seen, target: session.targetEach, judged: tally[f].judged })).join(" / ");
   if (active) {
-    prog.textContent = `測定中: ${line}。${done ? "そろいました。「終了して結果を見る」を押してください。" : "X の「おすすめ」「フォロー中」を、それぞれ眺めてください。"}`;
+    prog.textContent = shzT("sessRunning", { line, tail: shzT(done ? "sessDone" : "sessLook") });
   } else {
     const unjudged = SHZ_FEEDS.reduce((n, f) => n + tally[f].seen - tally[f].judged, 0);
-    prog.textContent = `前回の測定: ${line}。${unjudged ? `判定されていない記録が ${unjudged} 件あります（組み込み AI が使えなかったか、判定の前に終えました）。記録をオンにすると、X のページを開いている間に続きを判定します。` : ""}`;
+    prog.textContent = shzT("sessPrev", { line, tail: unjudged ? shzT("sessUnjudged", { n: unjudged }) : "" });
   }
   if (tally["for-you"].seen + tally.following.seen) {
     tallyTable(table, tally, true);
@@ -167,25 +190,25 @@ $("recDelete").addEventListener("click", async () => {
   const all = await chrome.storage.local.get(null);
   await chrome.storage.local.remove(Object.keys(all).filter((k) => k.startsWith("rec:")));
   await render();
-  say("記録をすべて消しました（判定済みの点も消えました）");
+  say(shzT("deleted"));
 });
 $("recStrip").addEventListener("click", async () => {
   await chrome.storage.local.set({ textClearedAt: Date.now() }); // 先に伝える（開いている X のタブの保存待ちと、判定の最中の書き込みが、本文を戻さないように）
   await shzApplyPurge(0); // 判定済みは本文を消して点を残す。未判定は記録ごと消える
   await render();
-  say("本文を消しました（判定済みの点は残っています。判定前の記録は消えました）");
+  say(shzT("stripped"));
 });
 
 $("sessStart").addEventListener("click", async () => {
   const { recordEnabled } = await chrome.storage.local.get({ recordEnabled: false });
   await chrome.storage.local.set({ session: { start: Date.now(), targetEach: SESSION_TARGET, prev: recordEnabled === true }, recordEnabled: true });
-  say("測定を始めました。X の「おすすめ」「フォロー中」を、それぞれ眺めてください");
+  say(shzT("sessStarted"));
 });
 $("sessEnd").addEventListener("click", async () => {
   const { session } = await chrome.storage.local.get({ session: null });
   if (!session || session.end) return;
   await chrome.storage.local.set({ session: { ...session, end: Date.now() }, recordEnabled: session.prev === true });
-  say(session.prev === true ? "測定を終えました（記録は引き続きオンです）" : "測定を終えました（記録は元どおりオフに戻しました）");
+  say(shzT(session.prev === true ? "sessEndedKeep" : "sessEndedOff"));
 });
 
 chrome.storage.onChanged.addListener((c, area) => { if (area === "local") scheduleRender(); });

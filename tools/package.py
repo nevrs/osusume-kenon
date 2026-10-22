@@ -12,6 +12,8 @@ if m.get("options_page"):
     files.add(m["options_page"])
     html = (root / m["options_page"]).read_text(encoding="utf8")
     files.update(re.findall(r'<script[^>]+src="([^"]+)"', html))
+if m.get("default_locale"):
+    files.update(str(f.relative_to(root)).replace("\\", "/") for f in (root / "_locales").rglob("messages.json"))
 missing = sorted(f for f in files if not (root / f).is_file())
 if missing:
     sys.exit(f"manifest や設定画面が名指ししているファイルが無い: {missing}")
