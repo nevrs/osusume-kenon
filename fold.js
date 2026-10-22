@@ -9,6 +9,7 @@ const SHZ_FOLD = {
   aiOffMs: 60_000, // 組み込み AI が使えなかったら、この間は先にたたまない
 };
 const SHZ_FOLD_ATTR = "data-shizume-fold"; // pending（判定待ち）/ folded（たたんだ）/ open（見せる）
+const SHZ_FOLD_ID = "data-shizume-fold-id"; // 印を付けたときの投稿の ID
 const SHZ_FOLD_BOX = "shizume-fold-box";
 
 let shzFoldOn = false;
@@ -33,6 +34,7 @@ article[${SHZ_FOLD_ATTR}="folded"]>:not(.${SHZ_FOLD_BOX}){display:none!important
 
 function shzFoldClear(article) {
   article.removeAttribute(SHZ_FOLD_ATTR);
+  article.removeAttribute(SHZ_FOLD_ID);
   article.querySelector(`.${SHZ_FOLD_BOX}`)?.remove();
 }
 
@@ -51,6 +53,7 @@ function shzFoldHide(article, id) {
   const btn = document.createElement("button");
   btn.type = "button";
   btn.textContent = "開く";
+  box.addEventListener("click", (e) => e.stopPropagation()); // X の「投稿を開く」（詳細ページへ移る）まで届かせない
   btn.addEventListener("click", () => {
     if (id) shzFoldOpened.add(id);
     shzFoldShow(article);
@@ -77,10 +80,15 @@ async function shzFoldCount() {
 
 // 投稿が出たとき。おすすめで、広告でなく、本文があるものだけを、先にたたむ（判定待ち）。それ以外は何もしない
 function shzFoldWatch(article) {
-  if (!shzFoldOn || article.hasAttribute(SHZ_FOLD_ATTR)) return;
+  if (!shzFoldOn) return;
   if (shzFeedOf(document, location.pathname) !== "for-you" || shzIsAd(article)) return;
   const id = shzPostId(article), text = shzPostText(article);
   if (!id || !text) return; // 本文がまだ無い・画像だけ。あとの走査でもう一度見る
+  if (article.hasAttribute(SHZ_FOLD_ATTR)) {
+    if (article.getAttribute(SHZ_FOLD_ID) === id) return;
+    shzFoldClear(article); // X が同じ要素に別の投稿を入れた。前の印は捨てて、もう一度見る
+  }
+  article.setAttribute(SHZ_FOLD_ID, id);
   const known = shzFoldResult.get(id);
   if (known) return shzFoldApply(article, id, known);
   if (Date.now() < shzFoldAiOffUntil) return; // AI が使えないあいだは、たたまない
@@ -104,6 +112,8 @@ async function shzFoldPump() {
       if (!next.isConnected || next.getAttribute(SHZ_FOLD_ATTR) !== "pending") continue;
       const id = shzPostId(next), text = shzPostText(next);
       const res = id && text ? await shzFeedJudge(text) : { failed: true };
+      if (id && res && !res.failed) shzFoldResult.set(id, res.h >= SHZ_FOLD.strong ? "fold" : "show"); // 間に合わずに見せたあとでも覚える（X が要素を作り直したとき、また空白にしない）
+      if (id && res?.failed) shzFoldResult.set(id, "show"); // 失敗した投稿も、繰り返し試さない
       if (!shzFoldOn || !next.isConnected || next.getAttribute(SHZ_FOLD_ATTR) !== "pending") continue; // 待っているあいだに、オフ・間に合わず表示・要素の消去
       if (res === null) { // 組み込み AI が使えない。待っている分も見せる
         shzFoldAiOffUntil = Date.now() + SHZ_FOLD.aiOffMs;
@@ -113,9 +123,7 @@ async function shzFoldPump() {
         continue;
       }
       if (res.failed) { shzFoldShow(next); continue; }
-      const verdict = res.h >= SHZ_FOLD.strong ? "fold" : "show";
-      shzFoldResult.set(id, verdict);
-      shzFoldApply(next, id, verdict);
+      shzFoldApply(next, id, shzFoldResult.get(id));
     }
   } finally {
     shzFoldRunning = false;

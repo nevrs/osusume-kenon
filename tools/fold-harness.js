@@ -91,8 +91,12 @@ const check = (name, ok, detail) => results.push(`${ok ? "OK" : "NG"}  ${name}${
   check("問いは「投稿:」と本文だけ", t.calls.prompts.every((p) => p.startsWith("投稿:\n")) && t.calls.prompts.length === 3, JSON.stringify(t.calls.prompts));
   check("保存するのは今日の件数（foldDay）だけで、本文は保存しない", t.writes.every((k) => k === "foldDay") && JSON.stringify(t.store).includes("馬鹿") === false && t.store.foldDay?.n === 1, JSON.stringify([t.writes, t.store.foldDay]));
 
-  // 開く
+  // 開く（X の側の「投稿を開く」まで、クリックが届かない）
+  let reached = 0;
+  t.art("1").addEventListener("click", () => { reached++; });
   t.art("1").querySelector(".shizume-fold-box button").click();
+  t.art("1").addEventListener("click", () => {}); 
+  check("「開く」のクリックは、X の投稿を開く処理（外側の article）まで届かない", reached === 0, String(reached));
   check("「開く」を押すと、見せる", t.st("1") === "open" && !t.art("1").querySelector(".shizume-fold-box"));
   // X が要素を作り直す
   const html = t.art("1").outerHTML;
@@ -131,6 +135,23 @@ const check = (name, ok, detail) => results.push(`${ok ? "OK" : "NG"}  ${name}${
   check("判定が間に合わなければ、見せる（空白のままにしない）", t.st("1") === "open" && t.st("2") === "open");
   await wait(900);
   check("間に合わずに見せたあと、遅れて出た判定で閉じ直さない", t.st("1") === "open");
+
+  // 間に合わなかった投稿の判定も覚える（作り直されたとき、また空白にしない）
+  t.art("1").remove();
+  t.add(article("1", "馬鹿"));
+  await wait(50);
+  check("間に合わずに見せた投稿は、遅れて届いた判定を覚え、作り直されたら（空白を経ずに）すぐ判定どおりにする", t.st("1") === "folded", String(t.st("1")));
+
+  // 同じ要素に別の投稿が入る
+  t = setup({ foldEnabled: true, body: article("1", "馬鹿じゃないの") });
+  await wait(400);
+  const a1 = t.art("1");
+  check("（前提）最初の投稿はたたまれている", t.st("1") === "folded");
+  a1.querySelector("time").parentElement.setAttribute("href", "/someone/status/9");
+  a1.querySelector('[data-testid="tweetText"] span').textContent = "いい天気";
+  t.add(article("2", "ふつう")); // 変化を起こして走査させる
+  await wait(400);
+  check("X が同じ要素に別の投稿を入れたら、前の印を捨てて判定し直す（別の投稿を隠したままにしない）", a1.getAttribute("data-shizume-fold") === "open" && !a1.querySelector(".shizume-fold-box"), String(a1.getAttribute("data-shizume-fold")));
 
   // AI が使えない
   t = setup({ foldEnabled: true, noAI: true });
