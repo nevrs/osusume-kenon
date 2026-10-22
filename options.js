@@ -4,6 +4,7 @@ const say = (t) => { $("saved").textContent = t; };
 const FEED_LABEL = { "for-you": "おすすめ", following: "フォロー中" };
 const SESSION_TARGET = 50; // 測定モードで、それぞれの feed について集める件数
 
+chrome.storage.local.remove("pauseEnabled"); // 削除した一呼吸の設定が残っていれば消す
 const rec = $("recordEnabled");
 chrome.storage.local.get({ recordEnabled: false }, (v) => { rec.checked = v.recordEnabled === true; });
 rec.addEventListener("change", async () => {
