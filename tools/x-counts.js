@@ -4,12 +4,6 @@
 //   ページ上で数えただけの分（保存していない）: どの投稿にも数の行がちょうど1つ。引用のある 6 件で、引用の枠の中に数
 //   英語の画面は未確認
 
-const X_DOM = {
-  quote: 'div[role="link"]', // 引用された投稿の外枠（x-dom.js と同じ）
-  // 返信・リポスト・いいね・ブックマーク・表示の数を、まとめて読み上げ用の文に持つ行
-  actionBar: '[role="group"][aria-label]',
-};
-
 // 「1,234」「1.2万」「3.4K」「5M」などを数にする。読めなければ null
 function parseCount(s) {
   const m = String(s).trim().match(/^(\d[\d,]*(?:\.\d+)?)\s*([万億KMB])?$/i);
@@ -53,17 +47,6 @@ function countsOf(label, lang) {
   if (!c) return null;
   if (/^ja\b/.test(lang || "")) for (const k of Object.keys(c)) c[k] ??= 0;
   return c;
-}
-
-// 投稿の数の行の文（読み上げ用）を返す。引用の枠の中の行は使わない。無ければ null
-function countLabel(post) {
-  for (const bar of post.querySelectorAll(X_DOM.actionBar)) {
-    const q = bar.closest(X_DOM.quote);
-    if (q && post.contains(q)) continue;
-    const label = bar.getAttribute("aria-label");
-    if (parseActionLabel(label)) return label;
-  }
-  return null;
 }
 
 if (typeof module !== "undefined") module.exports = { parseCount, parseActionLabel, countsOf };
