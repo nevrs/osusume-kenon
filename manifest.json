@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "shizume",
+  "name": "おすすめ検温",
   "version": "0.5.0",
   "description": "X のおすすめが炎上と対立に点数を付ける仕組みから、あなたを守る",
   "permissions": ["storage", "unlimitedStorage"],

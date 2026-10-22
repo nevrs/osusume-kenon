@@ -1,4 +1,4 @@
-# SESSION — shizume
+# SESSION — おすすめ検温
 
 ## 現在地
 
