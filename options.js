@@ -4,6 +4,16 @@ const say = (t) => { $("saved").textContent = t; };
 const FEED_LABEL = { "for-you": "おすすめ", following: "フォロー中" };
 const SESSION_TARGET = 50; // 測定モードで、それぞれの feed について集める件数
 
+const fold = $("foldEnabled");
+chrome.storage.local.get({ foldEnabled: false, foldDay: null }, (v) => {
+  fold.checked = v.foldEnabled === true;
+  showFold(v.foldDay);
+});
+fold.addEventListener("change", () => {
+  chrome.storage.local.set({ foldEnabled: fold.checked }, () => say(fold.checked ? "たたむ機能をオンにしました" : "たたむ機能をオフにしました"));
+});
+function showFold(d) { $("foldCount").textContent = d && d.d === shzDay(Date.now()) ? `今日たたんだ投稿: ${d.n} 件` : ""; }
+chrome.storage.onChanged.addListener((c, area) => { if (area === "local" && c.foldDay) showFold(c.foldDay.newValue); });
 chrome.storage.local.remove("pauseEnabled"); // 削除した一呼吸の設定が残っていれば消す
 const rec = $("recordEnabled");
 chrome.storage.local.get({ recordEnabled: false }, (v) => { rec.checked = v.recordEnabled === true; });

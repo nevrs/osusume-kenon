@@ -5,7 +5,7 @@ X（x.com）だけで動く Chrome 拡張。X の「おすすめ」が炎上と�
 ## 動かし方
 
 - テスト: `node --test test/x-dom.test.js test/record-core.test.js test/stats-core.test.js`（ディレクトリを渡すと Node 22 では失敗する）
-- 記録・判定・設定画面の流れ（模擬 DOM）: `node tools/record-harness.js . <jsdom を入れた node_modules>`、`node tools/feedjudge-harness.js . <同>`、`node tools/options-harness.js . <同>`
+- 記録・判定・設定画面の流れ（模擬 DOM）: `node tools/record-harness.js . <jsdom を入れた node_modules>`、`node tools/fold-harness.js . <同>`、`node tools/feedjudge-harness.js . <同>`、`node tools/options-harness.js . <同>`
 - 拡張: chrome://extensions →「パッケージ化されていない拡張機能を読み込む」でこのフォルダ
 
 ## 守ること
@@ -21,3 +21,4 @@ X（x.com）だけで動く Chrome 拡張。X の「おすすめ」が炎上と�
 - 結果を人に見せる文には、「目安」であること、「おすすめとフォロー中の差」であって「押し上げた量」ではないことを必ず添える（D10）
 - 利用者に見える文言は日本語（平易に。専門用語は言い換える）
 - 内部の名前（保存の印の塩 `shizume:`・DOM の id・data-shizume-*・shz 接頭辞）は、既存の記録と合わなくなるので変えない（2026-10-22 改名）
+- たたむ機能（fold.js）: 初期値はオフ。札の「開く」は本人が押す（拡張が X のボタンを押さない）。判定が使えない・遅いときは、たたまずに見せる。札に本文・投稿者名を出さない。本文を保存しない（D12）

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "おすすめ検温",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "icons": { "16": "icons/icon16.png", "32": "icons/icon32.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
   "description": "X のおすすめが炎上と対立に点数を付ける仕組みから、あなたを守る",
   "permissions": ["storage", "unlimitedStorage"],
@@ -9,7 +9,7 @@
   "content_scripts": [
     {
       "matches": ["https://x.com/*"],
-      "js": ["x-dom.js", "record-core.js", "record.js", "feed-judge.js"],
+      "js": ["x-dom.js", "record-core.js", "record.js", "feed-judge.js", "fold.js"],
       "run_at": "document_idle"
     }
   ]

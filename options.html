@@ -22,6 +22,11 @@
 <body>
 <h1>おすすめ検温の設定</h1>
 <section>
+  <label><input type="checkbox" id="foldEnabled"> <span><strong>敵意の強い投稿をたたむ（試験）</strong>（初期値はオフ）</span></label>
+  <p class="note">「おすすめ」で、判定が終わるまで投稿を隠し、敵意が強いものは「たたみました」の札にします。「開く」はあなたが押します。判定が間に合わないときや AI が使えないときは、そのまま見せます。判定は誤ることがあり、正当な批判もたたまれることがあります。</p>
+  <p class="note" id="foldCount"></p>
+</section>
+<section>
   <label><input type="checkbox" id="recordEnabled"> <span><strong>見せられた投稿の記録と判定</strong>（初期値はオフ）</span></label>
   <p class="note">「おすすめ」「フォロー中」で見た投稿の本文を、端末の中にだけ残し、AI で「怒り」「敵意」の点を付けます。外へは送りません。
     <strong>本文に書かれた他人のアカウント名や URL も残ります。</strong>本文は 14 日、点だけの記録は 1 年で消えます。</p>
