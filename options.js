@@ -16,7 +16,7 @@ function applyLang() {
   document.documentElement.lang = shzLang;
   for (const el of document.querySelectorAll("[data-i18n]")) setRich(el, shzT(el.dataset.i18n));
   document.title = shzT("title");
-  chrome.storage.local.get({ foldDay: null, foldDiag: null }, (v) => { showFold(v.foldDay); showDiag(v.foldDiag); });
+  chrome.storage.local.get({ debugLog: [] }, (v) => showLog(v.debugLog));
   render();
 }
 const langSel = $("lang");
@@ -24,27 +24,8 @@ chrome.storage.local.get({ lang: "auto" }, (v) => { langSel.value = v.lang; });
 langSel.addEventListener("change", () => chrome.storage.local.set({ lang: langSel.value }));
 shzLoadLang(applyLang);
 
-const foldLevel = $("foldThreshold");
-chrome.storage.local.get({ foldThreshold: 70 }, (v) => { foldLevel.value = String(v.foldThreshold); });
-foldLevel.addEventListener("change", () => chrome.storage.local.set({ foldThreshold: Number(foldLevel.value) }));
-const fold = $("foldEnabled");
-chrome.storage.local.get({ foldEnabled: false, foldDay: null }, (v) => {
-  fold.checked = v.foldEnabled === true;
-  showFold(v.foldDay);
-});
-fold.addEventListener("change", () => {
-  chrome.storage.local.set({ foldEnabled: fold.checked }, () => say(shzT(fold.checked ? "foldOn" : "foldOff")));
-});
-function showFold(d) { $("foldCount").textContent = d && d.d === shzDay(Date.now()) ? shzT("foldToday", { n: d.n }) : ""; }
-function showDiag(g) {
-  $("foldDiag").textContent = g ? shzT("foldDiag", { ...g, at: new Date(g.at || g.since).toLocaleString(), errText: g.err ? shzT("foldDiagErr", { err: g.err }) : "", avg: g.judged ? (g.ms / g.judged / 1000).toFixed(1) : "—" }) : "";
-}
-chrome.storage.onChanged.addListener((c, area) => {
-  if (area !== "local") return;
-  if (c.foldDay) showFold(c.foldDay.newValue);
-  if (c.foldDiag) showDiag(c.foldDiag.newValue);
-});
-chrome.storage.local.remove("pauseEnabled"); // 削除した一呼吸の設定が残っていれば消す
+// 削除した機能の設定が残っていれば消す（一呼吸: D11、たたむ: D13）
+chrome.storage.local.remove(["pauseEnabled", "foldEnabled", "foldDay", "foldDiag", "foldThreshold"]);
 const rec = $("recordEnabled");
 chrome.storage.local.get({ recordEnabled: false }, (v) => { rec.checked = v.recordEnabled === true; });
 rec.addEventListener("change", async () => {
@@ -244,7 +225,7 @@ $("logClear").addEventListener("click", async () => {
   say(shzT("logCleared"));
 });
 
-chrome.storage.onChanged.addListener((c, area) => { // ログ・診断の書き込みだけなら、表は描き直さない
-  if (area === "local" && Object.keys(c).some((k) => k !== "debugLog" && k !== "foldDiag")) scheduleRender();
+chrome.storage.onChanged.addListener((c, area) => { // ログの書き込みだけなら、表は描き直さない
+  if (area === "local" && Object.keys(c).some((k) => k !== "debugLog")) scheduleRender();
 });
 shzApplyPurge().then(render); // 期限の来た記録を片付ける。オフのままでも、設定画面を開いたときに行う

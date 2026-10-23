@@ -73,6 +73,16 @@ const check = (name, ok, detail) => results.push(`${ok ? "OK" : "NG"}  ${name}${
   await t.run();
   check("判定済みは、もう一度回しても判定し直さない", t.calls.prompts.length === 3);
 
+  // 動作ログ（オンのときだけ。本文・キーを入れない）
+  t = setup({ stored: { debugEnabled: true, "rec:a": rec("馬鹿じゃないの"), "rec:b": rec("壊れる投稿") } });
+  await wait(2600);
+  const lg = JSON.stringify(t.store.debugLog || []);
+  check("動作ログをオンにすると、判定の出来事（点・失敗の理由）が残る", /"record-judged"/.test(lg) && /"prompt-error"/.test(lg) && /"h":90/.test(lg), lg.slice(0, 300));
+  check("動作ログに、投稿の本文・記録のキーを入れない", !/馬鹿|壊れる投稿|rec:/.test(lg), lg.slice(0, 300));
+  t = setup({ stored: { "rec:a": rec("馬鹿") } });
+  await wait(2600);
+  check("動作ログは、初期値（オフ）では残さない", !("debugLog" in t.store));
+
   // 記録がオフなら何もしない
   t = setup({ stored: { "rec:a": rec("馬鹿") }, recordEnabled: false });
   await wait(300);

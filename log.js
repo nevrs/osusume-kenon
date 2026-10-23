@@ -8,10 +8,10 @@ let shzLogOn = false;
 const shzLogBuf = [];
 let shzLogTimer = 0;
 
-chrome.storage.local.get({ debugEnabled: false }, (v) => { shzLogOn = v.debugEnabled === true; });
+chrome.storage.local.get({ debugEnabled: false }).then((v) => { shzLogOn = v?.debugEnabled === true; });
 chrome.storage.onChanged.addListener((c, area) => { if (area === "local" && c.debugEnabled) shzLogOn = c.debugEnabled.newValue === true; });
 
-// src: 部品（fold / judge / record）、ev: 出来事、detail: 数やエラーの文（本文は渡さない）
+// src: 部品（judge / record）、ev: 出来事、detail: 数やエラーの文（本文は渡さない）
 function shzLog(src, ev, detail) {
   if (!shzLogOn) return;
   const e = { t: Date.now(), tab: shzLogTab, src, ev, ...(detail === undefined ? {} : { d: detail }) };

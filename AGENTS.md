@@ -5,7 +5,7 @@ X（x.com）だけで動く Chrome 拡張。X の「おすすめ」が炎上と�
 ## 動かし方
 
 - テスト: `node --test test/x-counts.test.js test/record-core.test.js test/stats-core.test.js`（ディレクトリを渡すと Node 22 では失敗する）
-- 記録・判定・設定画面の流れ（模擬 DOM）: `node tools/record-harness.js . <jsdom を入れた node_modules>`、`node tools/fold-harness.js . <同>`、`node tools/feedjudge-harness.js . <同>`、`node tools/options-harness.js . <同>`
+- 記録・判定・設定画面の流れ（模擬 DOM）: `node tools/record-harness.js . <jsdom を入れた node_modules>`、`node tools/feedjudge-harness.js . <同>`、`node tools/options-harness.js . <同>`
 - 拡張: chrome://extensions →「パッケージ化されていない拡張機能を読み込む」でこのフォルダ
 
 ## 守ること
@@ -21,6 +21,6 @@ X（x.com）だけで動く Chrome 拡張。X の「おすすめ」が炎上と�
 - 結果を人に見せる文には、「目安」であること、「おすすめとフォロー中の差」であって「押し上げた量」ではないことを必ず添える（D10）
 - 利用者に見える文言は日本語と英語（i18n.js に両方。日本語が正本で、平易に書く。専門用語は言い換える）。AI に読ませる問い（feed-judge.js）は、点の付き方が変わるので言語で替えない
 - 内部の名前（保存の印の塩 `shizume:`・DOM の id・data-shizume-*・shz 接頭辞）は、既存の記録と合わなくなるので変えない（2026-10-22 改名）
-- たたむ機能（fold.js）: 初期値はオフ。札の「開く」は本人が押す（拡張が X のボタンを押さない）。判定が使えない・遅いときは、たたまずに見せる。札に本文・投稿者名を出さない。本文を保存しない（D12）
+- X の画面を書き換えない（投稿を隠す・たたむ機能は D13 で外した。端末の中の AI では判定が間に合わないため。外部の AI に本文を送って速くする案は、本文を外へ出さない原則に反するので採らない）
 - 動作ログ（log.js の `shzLog`）には、投稿の本文・ID・投稿者名を渡さない（時刻・出来事・数・点・エラーの文だけ）。初期値はオフ
 - **利用者ごとの履歴・記録の中身を、リポに入れない。** 実機で集めた投稿の数・本文・投稿者・記録の書き出しは、コミットしない（公開リポ。履歴にも残さない）。試験の例は作り物か自作の文にする。`.gitignore` で、書き出しのファイル名の型を除いてある
