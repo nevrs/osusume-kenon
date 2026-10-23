@@ -55,4 +55,16 @@ function shzSessionProgress(records, session, nowMs = Date.now()) {
   return { tally, done };
 }
 
-if (typeof module !== "undefined") module.exports = { SHZ_STRONG, SHZ_MIN_N, SHZ_FEEDS, shzTally, shzTallyByDay, shzShare, shzVersions, shzSessionProgress };
+// 判定の見本（設定画面の「判定の見本」）。fromTs 以降の、本文が残っている判定済みから、無作為に n 件。おすすめとフォロー中を半分ずつ（足りなければ他方で埋める）。
+// 点の高い順には並べない（「敵意の強い投稿の一覧」にしない。DESIGN.md D14）。strongOnly なら、怒りか敵意が SHZ_STRONG 以上のものだけから選ぶ
+function shzSample(records, { n = 10, strongOnly = false, fromTs = 0, rand = Math.random } = {}) {
+  const shuffle = (xs) => { for (let i = xs.length - 1; i > 0; i--) { const k = Math.floor(rand() * (i + 1)); [xs[i], xs[k]] = [xs[k], xs[i]]; } return xs; };
+  const pool = Object.values(records).filter((r) => r.text && r.ts >= fromTs && shzIsJudged(r) && (!strongOnly || r.a >= SHZ_STRONG || r.h >= SHZ_STRONG));
+  const by = Object.fromEntries(SHZ_FEEDS.map((f) => [f, shuffle(pool.filter((r) => r.feed === f))]));
+  const half = Math.ceil(n / 2);
+  const pick = [...by["for-you"].slice(0, half), ...by.following.slice(0, n - half)];
+  const rest = shuffle([...by["for-you"].slice(half), ...by.following.slice(n - half)]);
+  return shuffle([...pick, ...rest.slice(0, n - pick.length)]).map(({ text, feed, ts, a, h }) => ({ text, feed, ts, a, h }));
+}
+
+if (typeof module !== "undefined") module.exports = { SHZ_STRONG, SHZ_MIN_N, SHZ_FEEDS, shzTally, shzTallyByDay, shzShare, shzVersions, shzSessionProgress, shzSample };

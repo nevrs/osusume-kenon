@@ -60,3 +60,36 @@ test("測定モードの進み具合: 始める前の記録は数えず、両方
   recs.late = j("following", noon + 500, 0, 0);
   assert.equal(shzSessionProgress(recs, { ...session, end: noon + 100 }, noon + 1000).tally.following.seen, 2); // 終えたあとの記録は数えない
 });
+
+test("判定の見本: 本文のある判定済みだけから、おすすめ・フォロー中を半分ずつ選ぶ。本文・feed・時刻・点だけを返す", () => {
+  const { shzSample } = require("../stats-core.js");
+  const recs = {};
+  for (let i = 0; i < 20; i++) recs[`rec:f${i}`] = { text: `おすすめ${i}`, feed: "for-you", ts: noon, a: i, h: 0, jv: "v" };
+  for (let i = 0; i < 20; i++) recs[`rec:g${i}`] = { text: `フォロー${i}`, feed: "following", ts: noon, a: 0, h: i, jv: "v" };
+  recs["rec:u"] = { text: "未判定", feed: "for-you", ts: noon };
+  recs["rec:t"] = { feed: "for-you", ts: noon, a: 99, h: 99 }; // 本文を消した記録
+  const s = shzSample(recs, { n: 10 });
+  assert.equal(s.length, 10);
+  assert.equal(s.filter((r) => r.feed === "for-you").length, 5);
+  assert.ok(s.every((r) => r.text && r.text !== "未判定"));
+  assert.deepEqual(Object.keys(s[0]).sort(), ["a", "feed", "h", "text", "ts"]);
+});
+
+test("判定の見本: 片方が足りなければ他方で埋める。strongOnly は怒りか敵意が 70 以上だけ", () => {
+  const { shzSample } = require("../stats-core.js");
+  const recs = {
+    "rec:1": { text: "a", feed: "for-you", ts: noon, a: 80, h: 0 },
+    "rec:2": { text: "b", feed: "for-you", ts: noon, a: 0, h: 75 },
+    "rec:3": { text: "c", feed: "for-you", ts: noon, a: 10, h: 10 },
+    "rec:4": { text: "d", feed: "following", ts: noon, a: 69, h: 69 },
+  };
+  assert.equal(shzSample(recs, { n: 10 }).length, 4);
+  assert.deepEqual(shzSample(recs, { n: 10, strongOnly: true }).map((r) => r.text).sort(), ["a", "b"]);
+  assert.deepEqual(shzSample({}, { n: 10 }), []);
+});
+
+test("判定の見本: fromTs より前の記録は選ばない（本文がまだ消されていなくても）", () => {
+  const { shzSample } = require("../stats-core.js");
+  const recs = { "rec:old": { text: "古い", feed: "for-you", ts: noon - 20 * DAY, a: 1, h: 1 }, "rec:new": { text: "新しい", feed: "for-you", ts: noon, a: 1, h: 1 } };
+  assert.deepEqual(shzSample(recs, { fromTs: noon - 14 * DAY }).map((r) => r.text), ["新しい"]);
+});

@@ -161,6 +161,21 @@ const check = (name, ok, detail) => results.push(`${ok ? "OK" : "NG"}  ${name}${
   await wait(400);
   check("差の文に「押し上げた量ではありません」を添える", t.text("trendNote").includes("押し上げた量ではありません"));
 
+  // 判定の見本: 閉じている間は出さない。開くと 10 件（本文と点）。強いものだけにも切り替えられる
+  t = setup({ ...many("a", "for-you", 20, 5), ...many("b", "following", 20, 0), "rec:x": { text: "消えた本文の記録", feed: "for-you", ts: now - 1000 } });
+  await wait(300);
+  check("判定の見本は、開くまで並べない", t.d.querySelectorAll("#sampleList .sample").length === 0);
+  t.d.getElementById("sampleBox").open = true;
+  t.click("sampleMore");
+  await wait(100);
+  const items = [...t.d.querySelectorAll("#sampleList .sample")];
+  check("開くと、判定済みから 10 件を、本文と怒り・敵意の点つきで出す（未判定は出さない）", items.length === 10 && items.every((i) => i.textContent.includes("本文") && /怒り \d+/.test(i.textContent) && /敵意 \d+/.test(i.textContent)) && !t.d.getElementById("sampleList").textContent.includes("消えた本文"), String(items.length));
+  check("見本は、おすすめとフォロー中を半分ずつ", items.filter((i) => i.textContent.startsWith("おすすめ")).length === 5);
+  t.click("sampleStrong");
+  await wait(100);
+  const strong = [...t.d.querySelectorAll("#sampleList .sample")];
+  check("「強いものだけ」で、70 点以上だけを出す（ボタンの文も切り替わる）", strong.length === 5 && strong.every((i) => /敵意 80/.test(i.textContent)) && t.text("sampleStrong").includes("無作為に戻す"), String(strong.length));
+
   // 画面の組み立てに innerHTML を使っていない（本文のような外の文字が入る場所は無いが、決まりとして確かめる）
   const src = fs.readFileSync(path.join(repo, "options.js"), "utf8");
   check("options.js は innerHTML を使わない", !/innerHTML|insertAdjacentHTML|document\.write/.test(src));

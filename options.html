@@ -17,6 +17,10 @@
   .bar.following { background: #4a7fb5; }
   .warn { color: #8a4b00; }
   button { margin-right: 6px; }
+  .sample { margin: 8px 0 0 26px; padding: 6px 10px; border-left: 3px solid #d8dee4; font-size: 13px; }
+  .sample .meta { color: #555; }
+  .sample .meta b { color: #c9533d; }
+  .sample .text { margin: 2px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 </style>
 </head>
 <body>
@@ -34,6 +38,13 @@
   <table id="trendTable" hidden></table>
   <table id="dayTable" hidden></table>
   <p class="note" data-i18n="trendFoot"></p>
+  <details id="sampleBox">
+    <summary class="note" data-i18n="sampleSummary"></summary>
+    <p class="note" data-i18n="sampleNote"></p>
+    <p class="note"><button type="button" id="sampleMore" data-i18n="sampleMore"></button><button type="button" id="sampleStrong"></button></p>
+    <p class="note" id="sampleEmpty" hidden></p>
+    <div id="sampleList"></div>
+  </details>
 </section>
 <section>
   <h2 data-i18n="sessH"></h2>

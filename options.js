@@ -17,6 +17,7 @@ function applyLang() {
   for (const el of document.querySelectorAll("[data-i18n]")) setRich(el, shzT(el.dataset.i18n));
   document.title = shzT("title");
   chrome.storage.local.get({ debugLog: [] }, (v) => showLog(v.debugLog));
+  drawSample(false);
   render();
 }
 const langSel = $("lang");
@@ -198,6 +199,42 @@ $("sessEnd").addEventListener("click", async () => {
   await chrome.storage.local.set({ session: { ...session, end: Date.now() }, recordEnabled: session.prev === true });
   say(shzT(session.prev === true ? "sessEndedKeep" : "sessEndedOff"));
 });
+
+// 判定の見本（D14）。開いたとき・ボタンを押したときだけ選び直す（判定が進むたびに入れ替えない）。点の高い順には並べない。コピーの仕組みは付けない
+let sampleStrong = false;
+let samplePicks = null; // いま出している見本（言語を変えたときは、選び直さずに描き直す）
+async function drawSample(repick = true) {
+  const box = $("sampleBox");
+  $("sampleStrong").textContent = shzT(sampleStrong ? "sampleRandom" : "sampleStrongOnly");
+  if (!box.open) return;
+  if (repick || !samplePicks) {
+    const all = await chrome.storage.local.get(null);
+    const recs = Object.fromEntries(Object.entries(all).filter(([k]) => k.startsWith("rec:")));
+    samplePicks = shzSample(recs, { n: 10, strongOnly: sampleStrong, fromTs: Date.now() - SHZ_KEEP_DAYS * 86_400_000 });
+  }
+  const picks = samplePicks;
+  const list = $("sampleList"), empty = $("sampleEmpty");
+  list.replaceChildren();
+  empty.hidden = picks.length > 0;
+  empty.textContent = shzT(sampleStrong ? "sampleNoneStrong" : "sampleNone");
+  for (const r of picks) {
+    const item = document.createElement("div");
+    item.className = "sample";
+    const meta = document.createElement("div");
+    meta.className = "meta";
+    meta.append(`${feedLabel(r.feed)} · ${new Date(r.ts).toLocaleDateString()} · `);
+    const score = (key, v) => { const el = document.createElement(v >= SHZ_STRONG ? "b" : "span"); el.textContent = shzT(key, { n: v }); return el; };
+    meta.append(score("sampleAnger", r.a), " · ", score("sampleHostility", r.h));
+    const text = document.createElement("p");
+    text.className = "text";
+    text.textContent = r.text;
+    item.append(meta, text);
+    list.append(item);
+  }
+}
+$("sampleBox").addEventListener("toggle", () => drawSample());
+$("sampleMore").addEventListener("click", () => drawSample());
+$("sampleStrong").addEventListener("click", () => { sampleStrong = !sampleStrong; drawSample(); });
 
 // 動作ログ（log.js が X のタブで書く）。表示・コピー・消去
 const dbg = $("debugEnabled");
