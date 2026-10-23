@@ -1,4 +1,8 @@
 {
-  "extName": { "message": "Osusume Kenon" },
-  "extDesc": { "message": "Measures, on your device, how many posts in X's For you and Following feeds are strongly angry or hostile, and compares them." }
+  "extName": {
+    "message": "Osusume Kenon"
+  },
+  "extDesc": {
+    "message": "Measures on-device how much language that lumps people together, scorns or excludes them reaches you in X's For you vs Following."
+  }
 }

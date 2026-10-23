@@ -51,9 +51,14 @@ async function shzHashId(id) {
 const SHZ_KEEP_DAYS = 14; // 本文を持つ日数（record.js と設定画面で共通）
 const SHZ_KEEP_COUNT_DAYS = 365; // 判定済みの記録を、本文を消したあとも点数だけ持つ日数
 
-// 判定が済んでいる記録か（点が 2 つとも数）
+// 判定が済んでいる記録か（今の問い: ひとまとめ g・見下し c・排除 x が 0/1。DESIGN.md D15）
 function shzIsJudged(r) {
-  return typeof r.h === "number" && typeof r.a === "number";
+  return typeof r.g === "number" && typeof r.c === "number" && typeof r.x === "number";
+}
+
+// 前の問い（怒り a・敵意 h の 0〜100。D10）で判定した記録。数えないが、点だけの記録は期限まで残す（D15）
+function shzIsLegacy(r) {
+  return !shzIsJudged(r) && typeof r.h === "number" && typeof r.a === "number";
 }
 
 // 日付（この端末の時刻での YYYY-MM-DD）
@@ -63,7 +68,7 @@ function shzDay(ts) {
 }
 
 // 期限が来た記録の片付け方。{remove: [キー], strip: {キー: 本文を除いた新しい記録}}
-//   本文の期限（textDays）が過ぎた … 判定済みなら本文を消して点数だけ残す（strip）。未判定なら記録ごと消す（remove）
+//   本文の期限（textDays）が過ぎた … 判定済み（前の問いの判定も含む）なら本文を消して点数だけ残す（strip）。未判定なら記録ごと消す（remove）
 //   点数の期限（countDays）が過ぎた、または時刻が壊れている … 記録ごと消す
 function shzPurgePlan(records, nowMs, textDays = SHZ_KEEP_DAYS, countDays = SHZ_KEEP_COUNT_DAYS) {
   const textLimit = nowMs - textDays * 86_400_000, countLimit = nowMs - countDays * 86_400_000;
@@ -71,8 +76,8 @@ function shzPurgePlan(records, nowMs, textDays = SHZ_KEEP_DAYS, countDays = SHZ_
   for (const [k, r] of Object.entries(records)) {
     if (!(r.ts >= countLimit)) remove.push(k);
     else if (!(r.ts >= textLimit)) {
-      if (!shzIsJudged(r)) remove.push(k);
-      else if ("text" in r) strip[k] = { feed: r.feed, ts: r.ts, a: r.a, h: r.h, jv: r.jv };
+      if (!shzIsJudged(r) && !shzIsLegacy(r)) remove.push(k);
+      else if ("text" in r) { const { text, ...rest } = r; strip[k] = rest; }
     }
   }
   return { remove, strip };
@@ -100,4 +105,4 @@ function shzSummarize(records) {
   return out;
 }
 
-if (typeof module !== "undefined") module.exports = { SHZ_KEEP_DAYS, SHZ_KEEP_COUNT_DAYS, shzIsJudged, shzDay, shzPurgePlan, shzPostId, shzPostText, shzIsAd, shzFeedOf, shzHashId, shzSummarize, SHZ_AD_LABELS };
+if (typeof module !== "undefined") module.exports = { SHZ_KEEP_DAYS, SHZ_KEEP_COUNT_DAYS, shzIsJudged, shzIsLegacy, shzDay, shzPurgePlan, shzPostId, shzPostText, shzIsAd, shzFeedOf, shzHashId, shzSummarize, SHZ_AD_LABELS };

@@ -5,7 +5,7 @@
   const LANG = { expectedInputs: [{ type: "text", languages: ["ja"] }], expectedOutputs: [{ type: "text", languages: ["ja"] }] };
   const SCORE = { type: "integer", minimum: 0, maximum: 100 };
   const BOOL = { type: "boolean" };
-  // 今の判定（feed-judge.js の split1）。比べるために同じ文
+  // 前の判定（0.10 までの feed-judge.js の split1）。比べるために同じ文
   const ANGER = "書き手の怒り・憤り・苛立ちの強さ（言葉づかいや語気から読み取れる感情の強さ。内容の正しさは問わない）";
   const HOSTILITY = "特定の人や集団に向けた敵意・侮辱・見下し（物事や制度への批判だけで、人への侮辱がないものは含まない）";
   // 新しい問い（D15）。立場や主張の正しさは問わず、言葉の形だけを見る

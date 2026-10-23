@@ -6,7 +6,7 @@ const { JSDOM } = require(path.join(mods, "jsdom"));
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const DAY = 86_400_000;
 
-// 偽の AI: 「馬鹿」を含めば 敵意 90・怒り 80、「!」を含めば 怒り 75、それ以外は 0。availability を差し替えられる
+// 偽の AI: 「馬鹿」を含めば ひとまとめ・見下し、「!」を含めば 動員、それ以外は全部 false。availability を差し替えられる
 function setup({ stored = {}, cap = 300, availability = "available", aiDelay = 0, recordEnabled = true, session = null, hidden = false, noAI = false, onSet = null } = {}) {
   const dom = new JSDOM("<body></body>", { url: "https://x.com/home", runScripts: "outside-only", pretendToBeVisual: true });
   const w = dom.window;
@@ -22,7 +22,7 @@ function setup({ stored = {}, cap = 300, availability = "available", aiDelay = 0
       if (aiDelay) await wait(aiDelay);
       calls.concurrent--;
       if (/壊れる/.test(p)) throw new Error("この 1 件だけ失敗");
-      return JSON.stringify({ anger: /馬鹿/.test(p) ? 80 : /!/.test(p) ? 75 : 0, hostility: /馬鹿/.test(p) ? 90 : 0 });
+      return JSON.stringify({ lump: /馬鹿/.test(p), contempt: /馬鹿/.test(p), exclusion: false, mobilize: /!/.test(p) });
     },
     destroy() {},
   });
@@ -55,17 +55,17 @@ function setup({ stored = {}, cap = 300, availability = "available", aiDelay = 0
 }
 
 const rec = (text, ts = Date.now(), feed = "for-you", extra = {}) => ({ text, feed, ts, ...extra });
-const nJudged = (store) => Object.entries(store).filter(([k, r]) => k.startsWith("rec:") && typeof r.h === "number").length;
+const nJudged = (store) => Object.entries(store).filter(([k, r]) => k.startsWith("rec:") && typeof r.g === "number").length;
 const results = [];
 const check = (name, ok, detail) => results.push(`${ok ? "OK" : "NG"}  ${name}${!ok && detail ? `
     → ${detail}` : ""}`);
 
 (async () => {
-  // 基本: 判定して点と版を書き足す。本文・feed・時刻は変えない
+  // 基本: 判定して答えと版を書き足す。本文・feed・時刻は変えない
   let t = setup({ stored: { "rec:a": rec("馬鹿じゃないの"), "rec:b": rec("いい天気", Date.now(), "following"), "rec:c": rec("すごい!") } });
   await wait(400);
   const a = t.store["rec:a"], b = t.store["rec:b"], c = t.store["rec:c"];
-  check("未判定の記録に敵意・怒りの点と版を書く", a.h === 90 && a.a === 80 && b.h === 0 && b.a === 0 && c.a === 75 && a.jv === "split1/c155");
+  check("未判定の記録に、ひとまとめ・見下し・排除・動員の答え（0/1）と版を書く", a.g === 1 && a.c === 1 && a.x === 0 && a.m === 0 && b.g === 0 && b.c === 0 && c.m === 1 && c.g === 0 && a.jv === "group1/c155", JSON.stringify([a, c]));
   check("本文・おすすめ/フォロー中・時刻は変えない", a.text === "馬鹿じゃないの" && a.feed === "for-you" && b.feed === "following" && typeof a.ts === "number");
   check("AI の元は 1 回だけ作る", t.calls.creates === 1);
   check("同時に 2 件は判定しない", t.calls.maxConcurrent === 1);
@@ -77,7 +77,7 @@ const check = (name, ok, detail) => results.push(`${ok ? "OK" : "NG"}  ${name}${
   t = setup({ stored: { debugEnabled: true, "rec:a": rec("馬鹿じゃないの"), "rec:b": rec("壊れる投稿") } });
   await wait(2600);
   const lg = JSON.stringify(t.store.debugLog || []);
-  check("動作ログをオンにすると、判定の出来事（点・失敗の理由）が残る", /"record-judged"/.test(lg) && /"prompt-error"/.test(lg) && /"h":90/.test(lg), lg.slice(0, 300));
+  check("動作ログをオンにすると、判定の出来事（点・失敗の理由）が残る", /"record-judged"/.test(lg) && /"prompt-error"/.test(lg) && /"c":1/.test(lg), lg.slice(0, 300));
   check("動作ログに、投稿の本文・記録のキーを入れない", !/馬鹿|壊れる投稿|rec:/.test(lg), lg.slice(0, 300));
   t = setup({ stored: { "rec:a": rec("馬鹿") } });
   await wait(2600);
@@ -86,11 +86,11 @@ const check = (name, ok, detail) => results.push(`${ok ? "OK" : "NG"}  ${name}${
   // 記録がオフなら何もしない
   t = setup({ stored: { "rec:a": rec("馬鹿") }, recordEnabled: false });
   await wait(300);
-  check("記録がオフなら判定しない", t.calls.prompts.length === 0 && !("h" in t.store["rec:a"]));
+  check("記録がオフなら判定しない", t.calls.prompts.length === 0 && !("g" in t.store["rec:a"]));
   t.store.recordEnabled = true;
   t.fire({ recordEnabled: { newValue: true } });
   await wait(300);
-  check("オンにしたら（ページを開き直さなくても）判定を始める", t.store["rec:a"].h === 90);
+  check("オンにしたら（ページを開き直さなくても）判定を始める", t.store["rec:a"].c === 1);
 
   // 画面が見えていないとき
   t = setup({ stored: { "rec:a": rec("馬鹿") }, hidden: true });
@@ -100,13 +100,13 @@ const check = (name, ok, detail) => results.push(`${ok ? "OK" : "NG"}  ${name}${
   // AI が使えない
   t = setup({ stored: { "rec:a": rec("馬鹿") }, availability: "downloadable" });
   await wait(300);
-  check("モデルが未ダウンロードなら作らず、記録を変えない", t.calls.creates === 0 && !("h" in t.store["rec:a"]));
+  check("モデルが未ダウンロードなら作らず、記録を変えない", t.calls.creates === 0 && !("g" in t.store["rec:a"]));
   t.ai.state = "available";
   await t.run();
-  check("あとで使えるようになったら判定する", t.store["rec:a"].h === 90);
+  check("あとで使えるようになったら判定する", t.store["rec:a"].c === 1);
   t = setup({ stored: { "rec:a": rec("馬鹿") }, noAI: true });
   await wait(300);
-  check("組み込み AI が無ければ、記録を変えない", !("h" in t.store["rec:a"]));
+  check("組み込み AI が無ければ、記録を変えない", !("g" in t.store["rec:a"]));
 
   // 1 日の上限
   const many = {};
@@ -114,7 +114,7 @@ const check = (name, ok, detail) => results.push(`${ok ? "OK" : "NG"}  ${name}${
   t = setup({ stored: many, cap: 3 });
   await wait(600);
   check("パッシブは 1 日の上限（ここでは 3）で止まる", nJudged(t.store) === 3);
-  check("古い記録から先に判定する（先に期限が来る）", ["rec:0", "rec:1", "rec:2"].every((k) => typeof t.store[k].h === "number"));
+  check("古い記録から先に判定する（先に期限が来る）", ["rec:0", "rec:1", "rec:2"].every((k) => typeof t.store[k].g === "number"));
 
   // 測定モード: 上限なし・記録がオフでも・画面が見えなくても・測定の分を先に
   const m2 = {};
@@ -139,7 +139,7 @@ const check = (name, ok, detail) => results.push(`${ok ? "OK" : "NG"}  ${name}${
   await wait(80);
   delete t.store["rec:a"]; // 判定している間に「すべて消す」
   await wait(500);
-  check("判定している間に消された記録を、書き戻さない", !("rec:a" in t.store) && typeof t.store["rec:b"].h === "number");
+  check("判定している間に消された記録を、書き戻さない", !("rec:a" in t.store) && typeof t.store["rec:b"].g === "number");
 
   // 別のタブが判定している
   t = setup({ stored: { "rec:a": rec("馬鹿"), judgeLock: { id: "別のタブ", ts: Date.now() } } });
@@ -147,23 +147,29 @@ const check = (name, ok, detail) => results.push(`${ok ? "OK" : "NG"}  ${name}${
   check("別のタブが判定中（ロックが新しい）なら割り込まない", t.calls.prompts.length === 0);
   await wait(500); // ロックの期限（400ms）が過ぎる
   await t.run();
-  check("ロックが古くなったら引き継ぐ", t.store["rec:a"].h === 90);
+  check("ロックが古くなったら引き継ぐ", t.store["rec:a"].c === 1);
 
   // 本文の無い記録は対象にならない
   t = setup({ stored: { "rec:a": { feed: "for-you", ts: Date.now(), h: 5, a: 6, jv: "split1/c155" }, "rec:b": { feed: "for-you", ts: Date.now() } } });
   await wait(300);
-  check("本文の無い記録（点だけ・抜け殻）は判定しない", t.calls.prompts.length === 0);
+  check("本文の無い記録（前の判定の点だけ・抜け殻）は判定しない", t.calls.prompts.length === 0 && t.store["rec:a"].h === 5);
 
-  // 点が壊れて返ったとき
-  t = setup({ stored: { "rec:a": rec("x") } });
-  t.ai.create = async () => ({ clone: async () => ({ prompt: async () => JSON.stringify({ anger: "高い" }), destroy() {} }), destroy() {} });
+  // 前の問い（怒り・敵意の点）で判定した記録は、本文があれば新しい問いで判定し直し、前の点は消す
+  t = setup({ stored: { "rec:a": { text: "馬鹿ばっかり", feed: "for-you", ts: Date.now(), a: 80, h: 90, jv: "split1/c155" } } });
   await wait(300);
-  check("点が数で返らなければ書かない", !("h" in t.store["rec:a"]));
+  const ra = t.store["rec:a"];
+  check("前の問いの判定は、本文があれば新しい問いで判定し直し、怒り・敵意の点は消す", ra.g === 1 && ra.c === 1 && !("a" in ra) && !("h" in ra) && ra.jv === "group1/c155" && ra.text === "馬鹿ばっかり", JSON.stringify(ra));
+
+  // 答えが壊れて返ったとき
+  t = setup({ stored: { "rec:a": rec("x") } });
+  t.ai.create = async () => ({ clone: async () => ({ prompt: async () => JSON.stringify({ lump: "はい", contempt: false, exclusion: false, mobilize: false }), destroy() {} }), destroy() {} });
+  await wait(300);
+  check("答えが true/false で返らなければ書かない", !("g" in t.store["rec:a"]));
 
   // 1 件だけ失敗する記録があっても、後ろを続ける
   t = setup({ stored: { "rec:a": rec("壊れる投稿", Date.now() - 3000), "rec:b": rec("ふつう", Date.now() - 2000), "rec:c": rec("馬鹿", Date.now() - 1000) } });
   await wait(500);
-  check("1 件だけ判定に失敗しても、後ろの記録は判定する", !("h" in t.store["rec:a"]) && t.store["rec:b"].h === 0 && t.store["rec:c"].h === 90);
+  check("1 件だけ判定に失敗しても、後ろの記録は判定する", !("g" in t.store["rec:a"]) && t.store["rec:b"].c === 0 && t.store["rec:c"].c === 1);
   const before = t.calls.prompts.length;
   await t.run();
   check("失敗した記録を、見回りのたびに繰り返し試さない", t.calls.prompts.length === before);
@@ -179,7 +185,7 @@ const check = (name, ok, detail) => results.push(`${ok ? "OK" : "NG"}  ${name}${
   hit = false;
   t = setup({ stored: { "rec:a": rec("馬鹿", Date.now() - 5000) }, onSet: (o, store) => { if (!hit && "rec:a" in o) { hit = true; store.textClearedAt = Date.now() + 1; } } });
   await wait(400);
-  check("書く直前に「本文だけ消す」が割り込んだら、本文を消し直し、点は残す", hit && t.store["rec:a"] && !("text" in t.store["rec:a"]) && t.store["rec:a"].h === 90);
+  check("書く直前に「本文だけ消す」が割り込んだら、本文を消し直し、答えは残す", hit && t.store["rec:a"] && !("text" in t.store["rec:a"]) && t.store["rec:a"].c === 1);
 
   // 測定モードの判定は、パッシブの 1 日の枠に入れない
   t = setup({ stored: { "rec:a": rec("1"), "rec:b": rec("2") }, session: { start: Date.now() - 1000, targetEach: 50, prev: false }, recordEnabled: false });
@@ -200,10 +206,10 @@ const check = (name, ok, detail) => results.push(`${ok ? "OK" : "NG"}  ${name}${
     return base;
   };
   await wait(300);
-  check("複製に失敗したら、その回は止め、記録は飛ばさない", !("h" in t.store["rec:a"]) && !("h" in t.store["rec:b"]));
+  check("複製に失敗したら、その回は止め、記録は飛ばさない", !("g" in t.store["rec:a"]) && !("g" in t.store["rec:b"]));
   cloneBroken = false;
   await t.run();
-  check("元を作り直して、あとの見回りで判定する", t.store["rec:a"].h === 90 && t.store["rec:b"].h === 0 && t.calls.creates >= 2);
+  check("元を作り直して、あとの見回りで判定する", t.store["rec:a"].c === 1 && t.store["rec:b"].c === 0 && t.calls.creates >= 2);
 
   console.log(results.join("\n"));
   process.exit(results.some((x) => x.startsWith("NG")) ? 1 : 0);

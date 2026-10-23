@@ -70,9 +70,9 @@ function shareCell(tr, count, judged, barClass) {
   }
 }
 
-// おすすめとフォロー中の差（敵意が強い割合）の文。比べられないときは理由
+// おすすめとフォロー中の差（ひとまとめ・見下し・排除のどれかに当てはまる割合）の文。比べられないときは理由
 function diffText(t) {
-  const a = shzShare(t["for-you"].hostile, t["for-you"].judged), b = shzShare(t.following.hostile, t.following.judged);
+  const a = shzShare(t["for-you"].any, t["for-you"].judged), b = shzShare(t.following.any, t.following.judged);
   if (a === null || b === null) return shzT("diffNeed", { min: SHZ_MIN_N, a: t["for-you"].judged, b: t.following.judged });
   const d = Math.round((a - b) * 100);
   const word = d > 0 ? shzT("diffHigher", { d }) : d < 0 ? shzT("diffLower", { d: -d }) : shzT("diffSame");
@@ -81,14 +81,16 @@ function diffText(t) {
 
 function tallyTable(table, t, withBar) {
   table.replaceChildren();
-  header(table, ["", shzT("thSeen"), shzT("thJudged"), shzT("thHostile"), shzT("thAngry")]);
+  header(table, ["", shzT("thSeen"), shzT("thJudged"), shzT("thAny"), shzT("thLump"), shzT("thContempt"), shzT("thExclusion")]);
   for (const f of SHZ_FEEDS) {
     const tr = document.createElement("tr");
     cell(tr, feedLabel(f));
     cell(tr, String(t[f].seen));
     cell(tr, String(t[f].judged));
-    shareCell(tr, t[f].hostile, t[f].judged, withBar ? f : "");
-    shareCell(tr, t[f].angry, t[f].judged);
+    shareCell(tr, t[f].any, t[f].judged, withBar ? f : "");
+    shareCell(tr, t[f].lump, t[f].judged);
+    shareCell(tr, t[f].contempt, t[f].judged);
+    shareCell(tr, t[f].exclusion, t[f].judged);
     table.append(tr);
   }
   table.hidden = false;
@@ -110,7 +112,7 @@ function renderDays(recs) {
   for (const d of Object.keys(days).sort().reverse().slice(0, 14)) {
     const tr = document.createElement("tr");
     cell(tr, d);
-    for (const f of SHZ_FEEDS) shareCell(tr, days[d][f].hostile, days[d][f].judged, f);
+    for (const f of SHZ_FEEDS) shareCell(tr, days[d][f].any, days[d][f].judged, f);
     dt.append(tr);
   }
   dt.hidden = false;
@@ -132,7 +134,8 @@ function renderTrend(recs) {
     return;
   }
   const versions = shzVersions(Object.fromEntries(Object.entries(recs).filter(([, r]) => r.ts >= from)));
-  note.textContent = diffText(t) + (versions.length > 1 ? shzT("versions", { v: versions.join(", ") }) : "");
+  const legacy = SHZ_FEEDS.reduce((n, f) => n + t[f].legacy, 0);
+  note.textContent = diffText(t) + (versions.length > 1 ? shzT("versions", { v: versions.join(", ") }) : "") + (legacy ? shzT("legacyNote", { n: legacy }) : "");
   tallyTable($("trendTable"), t, false);
 }
 
@@ -200,31 +203,33 @@ $("sessEnd").addEventListener("click", async () => {
   say(shzT(session.prev === true ? "sessEndedKeep" : "sessEndedOff"));
 });
 
-// 判定の見本（D14）。開いたとき・ボタンを押したときだけ選び直す（判定が進むたびに入れ替えない）。点の高い順には並べない。コピーの仕組みは付けない
-let sampleStrong = false;
+// 判定の見本（D14）。開いたとき・ボタンを押したときだけ選び直す（判定が進むたびに入れ替えない）。当てはまったものを先に並べない。コピーの仕組みは付けない
+let sampleHit = false;
 let samplePicks = null; // いま出している見本（言語を変えたときは、選び直さずに描き直す）
 async function drawSample(repick = true) {
   const box = $("sampleBox");
-  $("sampleStrong").textContent = shzT(sampleStrong ? "sampleRandom" : "sampleStrongOnly");
+  $("sampleHit").textContent = shzT(sampleHit ? "sampleRandom" : "sampleHitOnly");
   if (!box.open) return;
   if (repick || !samplePicks) {
     const all = await chrome.storage.local.get(null);
     const recs = Object.fromEntries(Object.entries(all).filter(([k]) => k.startsWith("rec:")));
-    samplePicks = shzSample(recs, { n: 10, strongOnly: sampleStrong, fromTs: Date.now() - SHZ_KEEP_DAYS * 86_400_000 });
+    samplePicks = shzSample(recs, { n: 10, hitOnly: sampleHit, fromTs: Date.now() - SHZ_KEEP_DAYS * 86_400_000 });
   }
   const picks = samplePicks;
   const list = $("sampleList"), empty = $("sampleEmpty");
   list.replaceChildren();
   empty.hidden = picks.length > 0;
-  empty.textContent = shzT(sampleStrong ? "sampleNoneStrong" : "sampleNone");
+  empty.textContent = shzT(sampleHit ? "sampleNoneHit" : "sampleNone");
   for (const r of picks) {
     const item = document.createElement("div");
     item.className = "sample";
     const meta = document.createElement("div");
     meta.className = "meta";
     meta.append(`${feedLabel(r.feed)} · ${new Date(r.ts).toLocaleDateString()} · `);
-    const score = (key, v) => { const el = document.createElement(v >= SHZ_STRONG ? "b" : "span"); el.textContent = shzT(key, { n: v }); return el; };
-    meta.append(score("sampleAnger", r.a), " · ", score("sampleHostility", r.h));
+    const hits = [["g", "thLump"], ["c", "thContempt"], ["x", "thExclusion"]].filter(([k]) => r[k]).map(([, key]) => shzT(key));
+    const tag = document.createElement(hits.length ? "b" : "span");
+    tag.textContent = hits.length ? hits.join("・") : shzT("sampleNoHit");
+    meta.append(tag);
     const text = document.createElement("p");
     text.className = "text";
     text.textContent = r.text;
@@ -234,7 +239,7 @@ async function drawSample(repick = true) {
 }
 $("sampleBox").addEventListener("toggle", () => drawSample());
 $("sampleMore").addEventListener("click", () => drawSample());
-$("sampleStrong").addEventListener("click", () => { sampleStrong = !sampleStrong; drawSample(); });
+$("sampleHit").addEventListener("click", () => { sampleHit = !sampleHit; drawSample(); });
 
 // 動作ログ（log.js が X のタブで書く）。表示・コピー・消去
 const dbg = $("debugEnabled");

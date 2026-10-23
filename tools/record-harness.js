@@ -176,7 +176,7 @@ const check = (name, ok) => results.push(`${ok ? "OK" : "NG"}  ${name}`);
   // 別のタブが先に残した、判定済みの記録を上書きしない
   t = setup({ enabled: true });
   await wait(150);
-  const judged = { feed: "following", ts: Date.now() - 1000, a: 81, h: 92, jv: "split1/c155" };
+  const judged = { feed: "following", ts: Date.now() - 1000, g: 1, c: 0, x: 0, m: 0, jv: "group1/c155" };
   t.store[`rec:${hashOf("111")}`] = judged; // このタブがオンにしたあとで、別のタブが残して判定まで済ませた
   t.see("111");
   await wait(5300);

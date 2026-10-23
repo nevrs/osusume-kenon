@@ -1,10 +1,12 @@
-// 記録した投稿の判定（DESIGN.md D10）。設定で記録をオンにしているとき（または測定モードの間）だけ動く。
-// 本文を Chrome の組み込み AI（端末の中）に読ませ、怒り（a）と敵意（h）の点を記録に書き足す。外へは何も送らない。
-// 問いは tools/anger-probe.js の split と同じ（research/anger-record.md で測ったもの）。変えるときは両方を直して測り直し、SHZ_FJ.version を上げる。
+// 記録した投稿の判定（DESIGN.md D10・D15）。設定で記録をオンにしているとき（または測定モードの間）だけ動く。
+// 本文を Chrome の組み込み AI（端末の中）に読ませ、ひとまとめ（g）・見下し（c）・排除（x）・動員（m）の答え（0/1）を記録に書き足す。外へは何も送らない。
+// 問いは tools/group-probe.js の group1 と同じ（research/group-record.md で測ったもの）。変えるときは両方を直して測り直し、SHZ_FJ.version を上げる。
+// 動員は数に使わない（排除と分けられなかった）が、あとで調べるために残す。
+// 前の問い（怒り a・敵意 h の 0〜100。版 split1）で判定した記録は、本文が残っていれば、この問いで判定し直す（a・h は消す）。
 // 普段（パッシブ）は、画面を開いているあいだ、間を空けて 1 件ずつ・1 日の上限つき。測定モード（アクティブ）の間は上限なしで、間を短くする。
 
 const SHZ_FJ = {
-  version: "split1", // 問いの版。点の付き方が変わったら上げる（記録に残す）
+  version: "group1", // 問いの版。答え方が変わったら上げる（記録に残す）
   gapMs: 2500, // 1 件ごとの間（パッシブ）
   sessionGapMs: 300, // 1 件ごとの間（測定モード）
   tickMs: 60_000, // 未判定が無いか見に行く間隔
@@ -12,12 +14,16 @@ const SHZ_FJ = {
   dailyCap: 300, // パッシブで 1 日に判定する件数の上限
   lockMs: 15_000, // 別のタブが判定している間、割り込まない時間
 };
-const SHZ_FJ_SCORE = { type: "integer", minimum: 0, maximum: 100 };
-const SHZ_FJ_ANGER = "書き手の怒り・憤り・苛立ちの強さ（言葉づかいや語気から読み取れる感情の強さ。内容の正しさは問わない）";
-const SHZ_FJ_HOSTILITY = "特定の人や集団に向けた敵意・侮辱・見下し（物事や制度への批判だけで、人への侮辱がないものは含まない）";
-const SHZ_FJ_SYSTEM = "あなたは SNS の投稿を読み、次の各項目に当てはまる度合いを 0〜100 の整数で答える。100 は非常に強い、0 はまったく無い。\n" +
-  `anger: ${SHZ_FJ_ANGER}\nhostility: ${SHZ_FJ_HOSTILITY}`;
-const SHZ_FJ_SCHEMA = { type: "object", properties: { anger: SHZ_FJ_SCORE, hostility: SHZ_FJ_SCORE }, required: ["anger", "hostility"] };
+const SHZ_FJ_SYSTEM = [
+  "あなたは SNS の投稿を読み、次の 4 つの問いに true か false で答える。投稿の主張が正しいか、どの立場の意見かは問わない。言葉の形だけを見る。迷ったら false。",
+  "lump（ひとまとめ）: 国籍・民族・性別・世代・職業・地域・宗教・政治的立場などの集団に属する人々を、みな同じ性質を持つかのように語っている（例「〇〇人は〜」「最近の若者は〜」「〇〇の支持者は〜」）。特定の個人、特定の会社や役所、その具体的な行いについて述べるだけなら false。ひとまとめにすることを批判している文も false。",
+  "contempt（見下し）: 人や集団を、侮辱する・見下す・人間扱いしない言葉がある（「バカ」「ゴミ」「虫」「こいつら」「無能」など）。物事・制度・行いへの批判だけなら false。",
+  "exclusion（排除）: 人や集団を、追い出す・権利を奪う・黙らせる・社会から消す・暴力を加えることを求めている、または当然だとしている。特定の人の違法行為を法に沿って罰することを論じるだけなら false。投票しないなど、本人の選択を述べるだけなら false。",
+  "mobilize（動員）: 読む人に、怒る・攻撃する・拡散する・抗議を集めることを、強い言葉で促している（「許すな」「今すぐ拡散」「黙っているのも同罪」「目を覚ませ」）。",
+].join("\n");
+const SHZ_FJ_BOOL = { type: "boolean" };
+const SHZ_FJ_QS = ["lump", "contempt", "exclusion", "mobilize"];
+const SHZ_FJ_SCHEMA = { type: "object", properties: Object.fromEntries(SHZ_FJ_QS.map((q) => [q, SHZ_FJ_BOOL])), required: SHZ_FJ_QS };
 const SHZ_FJ_LANG = { expectedInputs: [{ type: "text", languages: ["ja", "en"] }], expectedOutputs: [{ type: "text", languages: ["ja"] }] };
 
 const shzFjTab = Math.random().toString(36).slice(2); // このタブの印（判定を同時に回さないため）
@@ -38,7 +44,7 @@ async function shzFjMakeBase() {
 // 失敗の理由（エラーの種類と文。本文は入れない。診断に出す）
 const shzFjErr = (e) => `${e?.name || "Error"}: ${e?.message || e}`.slice(0, 160);
 
-// 1 件を判定して {a, h} を返す。組み込み AI が使えなければ null、その 1 件だけが失敗したら {failed: true, err}
+// 1 件を判定して {g, c, x, m}（0/1）を返す。組み込み AI が使えなければ null、その 1 件だけが失敗したら {failed: true, err}
 async function shzFeedJudge(text) {
   if (typeof LanguageModel === "undefined") { shzLog("judge", "no-LanguageModel"); return null; }
   const pending = (shzFjBase ??= shzFjMakeBase());
@@ -66,8 +72,8 @@ async function shzFeedJudge(text) {
     const out = await s.prompt(`投稿:\n${text}`, { responseConstraint: SHZ_FJ_SCHEMA });
     let o;
     try { o = JSON.parse(out); } catch { shzLog("judge", "bad-json", { outLen: String(out).length }); return { failed: true, err: "bad-json" }; } // パースのエラー文には AI の出力が入るので、残さない
-    if (!Number.isFinite(o?.anger) || !Number.isFinite(o?.hostility)) return { failed: true, err: "not-a-number" };
-    return { a: Math.round(o.anger), h: Math.round(o.hostility) };
+    if (!SHZ_FJ_QS.every((q) => typeof o?.[q] === "boolean")) return { failed: true, err: "not-a-boolean" };
+    return { g: +o.lump, c: +o.contempt, x: +o.exclusion, m: +o.mobilize };
   } catch (e) {
     shzLog("judge", "prompt-error", { err: shzFjErr(e), len: text.length });
     return { failed: true, err: shzFjErr(e) }; // この 1 件だけの失敗（長すぎる本文など）。元は壊さない
@@ -114,16 +120,18 @@ async function shzFjRun() {
       if (!cur || !cur.text || shzIsJudged(cur)) continue;
       const t0 = Date.now();
       const res = await shzFeedJudge(cur.text);
-      shzLog("judge", "record-judged", res ? (res.failed ? { failed: res.err } : { ms: Date.now() - t0, a: res.a, h: res.h }) : "ai-unavailable");
+      shzLog("judge", "record-judged", res ? (res.failed ? { failed: res.err } : { ms: Date.now() - t0, g: res.g, c: res.c, x: res.x, m: res.m }) : "ai-unavailable");
       if (!res) return; // 組み込み AI が使えない。次の見回りで確かめ直す
       if (res.failed) { shzFjSkip.add(k); await shzFjSleep(fast ? SHZ_FJ.sessionGapMs : SHZ_FJ.gapMs); continue; } // この 1 件だけの失敗。後ろの記録は続ける（間は空ける）
       const latest = (await chrome.storage.local.get(k))[k];
       if (!latest) continue; // 判定している間に消された
       // 読んでから書くまでの間に、消す操作が割り込んでも本文を戻さない: 書いたあとで、消す操作の目印が変わっていないか見て、変わっていれば消し直す
-      await chrome.storage.local.set({ [k]: { ...latest, a: res.a, h: res.h, jv: shzFjVersion() }, ...(fast ? {} : { judgeDay: { d: today, n: used + 1 } }) });
+      const { a, h, ...rest } = latest; // 前の問いの点は消す（同じ記録に 2 つの物差しを残さない）
+      const ans = { g: res.g, c: res.c, x: res.x, m: res.m, jv: shzFjVersion() };
+      await chrome.storage.local.set({ [k]: { ...rest, ...ans }, ...(fast ? {} : { judgeDay: { d: today, n: used + 1 } }) });
       const after = await chrome.storage.local.get({ recordClearedAt: 0, textClearedAt: 0 });
       if (after.recordClearedAt !== st.recordClearedAt) await chrome.storage.local.remove(k); // 「すべて消す」が割り込んだ
-      else if (after.textClearedAt !== st.textClearedAt && latest.ts < after.textClearedAt) await chrome.storage.local.set({ [k]: { feed: latest.feed, ts: latest.ts, a: res.a, h: res.h, jv: shzFjVersion() } }); // 「本文だけ消す」が割り込んだ
+      else if (after.textClearedAt !== st.textClearedAt && latest.ts < after.textClearedAt) await chrome.storage.local.set({ [k]: { feed: latest.feed, ts: latest.ts, ...ans } }); // 「本文だけ消す」が割り込んだ
       await shzFjSleep(fast ? SHZ_FJ.sessionGapMs : SHZ_FJ.gapMs);
     }
   } finally {

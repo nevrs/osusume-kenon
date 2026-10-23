@@ -33,11 +33,12 @@ function setup(stored = {}) {
   return { w, d, store, text, click: (id) => d.getElementById(id).click() };
 }
 
-const J = (feed, ts, h, a, extra = {}) => ({ feed, ts, h, a, jv: "split1/c155", ...extra });
-// n 件の判定済み（強い敵意は strong 件）
-function many(prefix, feed, n, strong, ts = now - 1000) {
+// 今の問い（D15）で判定済みの記録。hit なら「ひとまとめ」に当てはまる
+const J = (feed, ts, hit, extra = {}) => ({ feed, ts, g: hit ? 1 : 0, c: 0, x: 0, m: 0, jv: "group1/c155", ...extra });
+// n 件の判定済み（当てはまるのは hits 件）
+function many(prefix, feed, n, hits, ts = now - 1000) {
   const o = {};
-  for (let i = 0; i < n; i++) o[`rec:${prefix}${i}`] = J(feed, ts - i, i < strong ? 80 : 10, 20, { text: "本文" });
+  for (let i = 0; i < n; i++) o[`rec:${prefix}${i}`] = J(feed, ts - i, i < hits, { text: "本文" });
   return o;
 }
 const results = [];
@@ -70,7 +71,7 @@ const check = (name, ok, detail) => results.push(`${ok ? "OK" : "NG"}  ${name}${
   check("直近 14 日の外の記録は、傾向の表に入れない（日ごとの表には残る）", t.text("trendNote").includes("直近 14 日の記録がありません") && t.d.getElementById("trendTable").hidden && t.d.querySelectorAll("#dayTable tr").length >= 2, `${t.text("trendNote")} / 日の行 ${t.d.querySelectorAll("#dayTable tr").length}`);
 
   // 判定の版の混在
-  t = setup({ ...many("a", "for-you", 40, 20), "rec:x": J("for-you", now, 90, 90, { jv: "split2/c156" }) });
+  t = setup({ ...many("a", "for-you", 40, 20), "rec:x": J("for-you", now, true, { jv: "group2/c156" }) });
   await wait(400);
   check("判定の版が混ざっていれば知らせる", t.text("trendNote").includes("判定の版が混ざっています"));
 
@@ -80,7 +81,7 @@ const check = (name, ok, detail) => results.push(`${ok ? "OK" : "NG"}  ${name}${
   t.click("recStrip");
   await wait(300);
   const left = Object.entries(t.store).filter(([k]) => k.startsWith("rec:"));
-  check("「本文だけ消す」: 判定済みは本文が消えて点が残り、未判定は消える", left.length === 3 && left.every(([, r]) => !("text" in r) && typeof r.h === "number") && !("rec:u" in t.store));
+  check("「本文だけ消す」: 判定済みは本文が消えて答えが残り、未判定は消える", left.length === 3 && left.every(([, r]) => !("text" in r) && typeof r.g === "number") && !("rec:u" in t.store));
   check("「本文だけ消す」では、開いている X のタブの「記録済みの覚え」を捨てさせない（recordClearedAt を書かない）", !("recordClearedAt" in t.store));
 
   // すべて消す
@@ -160,8 +161,14 @@ const check = (name, ok, detail) => results.push(`${ok ? "OK" : "NG"}  ${name}${
   t = setup({ ...many("a", "for-you", 40, 20), ...many("b", "following", 40, 4) });
   await wait(400);
   check("差の文に「押し上げた量ではありません」を添える", t.text("trendNote").includes("押し上げた量ではありません"));
+  check("表に「どれか」「ひとまとめ」「見下し」「排除」の列がある", ["どれか", "ひとまとめ", "見下し", "排除"].every((h) => [...t.d.querySelectorAll("#trendTable th")].some((th) => th.textContent === h)));
 
-  // 判定の見本: 閉じている間は出さない。開くと 10 件（本文と点）。強いものだけにも切り替えられる
+  // 前の問い（怒り・敵意の点）の記録は数えず、件数を知らせる
+  t = setup({ ...many("a", "for-you", 40, 20), ...many("b", "following", 40, 4), "rec:l": { feed: "for-you", ts: now - 1000, a: 90, h: 90, jv: "split1/c155" } });
+  await wait(400);
+  check("前の判定の記録は割合に入れず、「数えていません」と件数を出す", t.text("trendNote").includes("おすすめ 50%") && t.text("trendNote").includes("前の判定（怒り・敵意の点）の記録 1 件は数えていません"), t.text("trendNote"));
+
+  // 判定の見本: 閉じている間は出さない。開くと 10 件（本文と判定）。当てはまったものだけにも切り替えられる
   t = setup({ ...many("a", "for-you", 20, 5), ...many("b", "following", 20, 0), "rec:x": { text: "消えた本文の記録", feed: "for-you", ts: now - 1000 } });
   await wait(300);
   check("判定の見本は、開くまで並べない", t.d.querySelectorAll("#sampleList .sample").length === 0);
@@ -169,12 +176,12 @@ const check = (name, ok, detail) => results.push(`${ok ? "OK" : "NG"}  ${name}${
   t.click("sampleMore");
   await wait(100);
   const items = [...t.d.querySelectorAll("#sampleList .sample")];
-  check("開くと、判定済みから 10 件を、本文と怒り・敵意の点つきで出す（未判定は出さない）", items.length === 10 && items.every((i) => i.textContent.includes("本文") && /怒り \d+/.test(i.textContent) && /敵意 \d+/.test(i.textContent)) && !t.d.getElementById("sampleList").textContent.includes("消えた本文"), String(items.length));
+  check("開くと、判定済みから 10 件を、本文と判定（当てはまった項目か「当てはまらない」）つきで出す（未判定は出さない）", items.length === 10 && items.every((i) => i.textContent.includes("本文") && /ひとまとめ|当てはまらない/.test(i.textContent)) && !t.d.getElementById("sampleList").textContent.includes("消えた本文"), String(items.length));
   check("見本は、おすすめとフォロー中を半分ずつ", items.filter((i) => i.textContent.startsWith("おすすめ")).length === 5);
-  t.click("sampleStrong");
+  t.click("sampleHit");
   await wait(100);
-  const strong = [...t.d.querySelectorAll("#sampleList .sample")];
-  check("「強いものだけ」で、70 点以上だけを出す（ボタンの文も切り替わる）", strong.length === 5 && strong.every((i) => /敵意 80/.test(i.textContent)) && t.text("sampleStrong").includes("無作為に戻す"), String(strong.length));
+  const hitItems = [...t.d.querySelectorAll("#sampleList .sample")];
+  check("「当てはまったものだけ」で、当てはまったものだけを出す（ボタンの文も切り替わる）", hitItems.length === 5 && hitItems.every((i) => i.querySelector(".meta b")?.textContent === "ひとまとめ") && t.text("sampleHit").includes("無作為に戻す"), String(hitItems.length));
 
   // 画面の組み立てに innerHTML を使っていない（本文のような外の文字が入る場所は無いが、決まりとして確かめる）
   const src = fs.readFileSync(path.join(repo, "options.js"), "utf8");
