@@ -1,5 +1,5 @@
 // 判定済みの記録を数える（画面に触れない。設定画面とテストが使う）。
-// 数えるのは今の問い（D15）の答え: ひとまとめ（g）・見下し（c）・排除（x）。どれかに当てはまれば any。前の問い（怒り・敵意の点）の記録は legacy として件数だけ数える
+// 数えるのは今の問い（D15）の答え: ひとまとめ（g）・見下し（c）・排除（x）。どれかに当てはまれば any。前の問い（怒り・敵意の点、版 group1 の答え。D16）の記録は legacy として件数だけ数える
 
 // ブラウザでは record-core.js が先に読まれていて、shzIsJudged・shzDay が使える。テスト（node）ではここで読み込む
 if (typeof module !== "undefined") { const c = require("./record-core.js"); globalThis.shzIsJudged = c.shzIsJudged; globalThis.shzIsLegacy = c.shzIsLegacy; globalThis.shzDay = c.shzDay; }
@@ -65,7 +65,7 @@ function shzSample(records, { n = 10, hitOnly = false, fromTs = 0, rand = Math.r
   const half = Math.ceil(n / 2);
   const pick = [...by["for-you"].slice(0, half), ...by.following.slice(0, n - half)];
   const rest = shuffle([...by["for-you"].slice(half), ...by.following.slice(n - half)]);
-  return shuffle([...pick, ...rest.slice(0, n - pick.length)]).map(({ text, feed, ts, g, c, x }) => ({ text, feed, ts, g, c, x }));
+  return shuffle([...pick, ...rest.slice(0, n - pick.length)]).map(({ text, feed, ts, g, c, x, jv }) => ({ text, feed, ts, g, c, x, jv }));
 }
 
 if (typeof module !== "undefined") module.exports = { SHZ_MIN_N, SHZ_FEEDS, shzTally, shzTallyByDay, shzShare, shzVersions, shzSessionProgress, shzSample };

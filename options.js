@@ -182,12 +182,14 @@ $("recDelete").addEventListener("click", async () => {
   const all = await chrome.storage.local.get(null);
   await chrome.storage.local.remove(Object.keys(all).filter((k) => k.startsWith("rec:")));
   await render();
+  await drawSample(); // 消した本文を見本の欄（とコピー）に残さない
   say(shzT("deleted"));
 });
 $("recStrip").addEventListener("click", async () => {
   await chrome.storage.local.set({ textClearedAt: Date.now() }); // 先に伝える（開いている X のタブの保存待ちと、判定の最中の書き込みが、本文を戻さないように）
   await shzApplyPurge(0); // 判定済みは本文を消して点を残す。未判定は記録ごと消える
   await render();
+  await drawSample(); // 消した本文を見本の欄（とコピー）に残さない
   say(shzT("stripped"));
 });
 
@@ -203,9 +205,12 @@ $("sessEnd").addEventListener("click", async () => {
   say(shzT(session.prev === true ? "sessEndedKeep" : "sessEndedOff"));
 });
 
-// 判定の見本（D14）。開いたとき・ボタンを押したときだけ選び直す（判定が進むたびに入れ替えない）。当てはまったものを先に並べない。コピーの仕組みは付けない
+// 判定の見本（D14）。開いたとき・ボタンを押したときだけ選び直す（判定が進むたびに入れ替えない）。当てはまったものを先に並べない。
+// 判定の当たり外れを確かめるため、出ている見本をそのままコピーできる（本人の判断。2026-10-24）
 let sampleHit = false;
 let samplePicks = null; // いま出している見本（言語を変えたときは、選び直さずに描き直す）
+const sampleHead = (r) => `${feedLabel(r.feed)} · ${new Date(r.ts).toLocaleDateString()}`;
+const sampleHits = (r) => [["g", "thLump"], ["c", "thContempt"], ["x", "thExclusion"]].filter(([k]) => r[k]).map(([, key]) => shzT(key));
 async function drawSample(repick = true) {
   const box = $("sampleBox");
   $("sampleHit").textContent = shzT(sampleHit ? "sampleRandom" : "sampleHitOnly");
@@ -220,13 +225,14 @@ async function drawSample(repick = true) {
   list.replaceChildren();
   empty.hidden = picks.length > 0;
   empty.textContent = shzT(sampleHit ? "sampleNoneHit" : "sampleNone");
+  $("sampleCopy").disabled = !picks.length;
   for (const r of picks) {
     const item = document.createElement("div");
     item.className = "sample";
     const meta = document.createElement("div");
     meta.className = "meta";
-    meta.append(`${feedLabel(r.feed)} · ${new Date(r.ts).toLocaleDateString()} · `);
-    const hits = [["g", "thLump"], ["c", "thContempt"], ["x", "thExclusion"]].filter(([k]) => r[k]).map(([, key]) => shzT(key));
+    meta.append(`${sampleHead(r)} · `);
+    const hits = sampleHits(r);
     const tag = document.createElement(hits.length ? "b" : "span");
     tag.textContent = hits.length ? hits.join("・") : shzT("sampleNoHit");
     meta.append(tag);
@@ -240,6 +246,14 @@ async function drawSample(repick = true) {
 $("sampleBox").addEventListener("toggle", () => drawSample());
 $("sampleMore").addEventListener("click", () => drawSample());
 $("sampleHit").addEventListener("click", () => { sampleHit = !sampleHit; drawSample(); });
+$("sampleCopy").addEventListener("click", async () => {
+  if (!samplePicks?.length) return;
+  const jvs = [...new Set(samplePicks.map((r) => r.jv || "?"))].join(", ");
+  const head = `osusume-kenon ${chrome.runtime?.getManifest?.().version ?? "?"} / ${jvs}`; // 判定の版（どの問いで判定したか）を添える
+  const items = samplePicks.map((r) => `${sampleHead(r)} · ${sampleHits(r).join("・") || shzT("sampleNoHit")}\n${r.text}`);
+  try { await navigator.clipboard.writeText([head, ...items].join("\n\n")); } catch { say(shzT("copyFailed")); return; }
+  say(shzT("sampleCopied"));
+});
 
 // 動作ログ（log.js が X のタブで書く）。表示・コピー・消去
 const dbg = $("debugEnabled");
@@ -258,7 +272,7 @@ chrome.storage.onChanged.addListener((c, area) => { if (area === "local" && c.de
 $("logCopy").addEventListener("click", async () => {
   const { debugLog } = await chrome.storage.local.get({ debugLog: [] });
   const head = `osusume-kenon ${chrome.runtime?.getManifest?.().version ?? "?"} / ${navigator.userAgent}`;
-  await navigator.clipboard.writeText([head, ...debugLog.map(logLine)].join("\n"));
+  try { await navigator.clipboard.writeText([head, ...debugLog.map(logLine)].join("\n")); } catch { say(shzT("copyFailed")); return; }
   say(shzT("logCopied"));
 });
 $("logClear").addEventListener("click", async () => {

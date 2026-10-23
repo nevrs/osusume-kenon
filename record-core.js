@@ -51,14 +51,16 @@ async function shzHashId(id) {
 const SHZ_KEEP_DAYS = 14; // 本文を持つ日数（record.js と設定画面で共通）
 const SHZ_KEEP_COUNT_DAYS = 365; // 判定済みの記録を、本文を消したあとも点数だけ持つ日数
 
-// 判定が済んでいる記録か（今の問い: ひとまとめ g・見下し c・排除 x が 0/1。DESIGN.md D15）
+// 判定が済んでいる記録か（今の問い: ひとまとめ g・見下し c・排除 x が 0/1。DESIGN.md D15・D16）
+// 版 group1（はい／いいえで答えさせた 0.11）の答えは、実際の投稿で言いすぎが多かったので、判定済みとみなさない（D16）
+const shzIsGcx = (r) => typeof r.g === "number" && typeof r.c === "number" && typeof r.x === "number";
 function shzIsJudged(r) {
-  return typeof r.g === "number" && typeof r.c === "number" && typeof r.x === "number";
+  return shzIsGcx(r) && !String(r.jv || "").startsWith("group1/");
 }
 
-// 前の問い（怒り a・敵意 h の 0〜100。D10）で判定した記録。数えないが、点だけの記録は期限まで残す（D15）
+// 前の問いで判定した記録（怒り a・敵意 h の 0〜100。D10。または版 group1。D16）。数えないが、本文の無い記録は期限まで残す（D15）
 function shzIsLegacy(r) {
-  return !shzIsJudged(r) && typeof r.h === "number" && typeof r.a === "number";
+  return !shzIsJudged(r) && ((typeof r.h === "number" && typeof r.a === "number") || shzIsGcx(r));
 }
 
 // 日付（この端末の時刻での YYYY-MM-DD）

@@ -60,6 +60,24 @@
     {"id": "N07", "group": "neutral", "text": "推しのライブ当たった！！！！！生きててよかった！！！", "lump": false, "contempt": false, "exclusion": false, "mobilize": false},
     {"id": "N08", "group": "neutral", "text": "新しいパン屋さん、クロワッサンが当たりだった", "lump": false, "contempt": false, "exclusion": false, "mobilize": false},
     {"id": "N09", "group": "neutral", "text": "私たち看護師の夜勤は、正直かなりきつい。もう少し人手がほしい", "lump": false, "contempt": false, "exclusion": false, "mobilize": false, "amb": true},
-    {"id": "N10", "group": "neutral", "text": "あの試合の判定には納得できない。審判、ちゃんと見てた？", "lump": false, "contempt": false, "exclusion": false, "mobilize": false}
+    {"id": "N10", "group": "neutral", "text": "あの試合の判定には納得できない。審判、ちゃんと見てた？", "lump": false, "contempt": false, "exclusion": false, "mobilize": false},
+    {"id": "H01", "group": "hard", "text": "あの漫画の主人公、決断が遅すぎて読んでてもどかしい。でも最終巻で化けそう", "lump": false, "contempt": false, "exclusion": false, "mobilize": false},
+    {"id": "H02", "group": "hard", "text": "このゲームのドワーフ族、設定だと全員頑固で酒好きなんだよね。そこがかわいい", "lump": false, "contempt": false, "exclusion": false, "mobilize": false},
+    {"id": "H03", "group": "hard", "text": "この映画は駄作。脚本がひどすぎて、二時間返してほしい", "lump": false, "contempt": false, "exclusion": false, "mobilize": false},
+    {"id": "H04", "group": "hard", "text": "〇〇社の新しいアプリ、使いにくすぎて笑った。誰がこれで良いと言ったんだ", "lump": false, "contempt": false, "exclusion": false, "mobilize": false},
+    {"id": "H05", "group": "hard", "text": "うちのカーナビ、バカすぎる。三回連続で同じ行き止まりに案内された", "lump": false, "contempt": false, "exclusion": false, "mobilize": false},
+    {"id": "H06", "group": "hard", "text": "スマートスピーカーに天気を聞くと、なぜか毎回音楽をかける。こいつ本当に使えない", "lump": false, "contempt": false, "exclusion": false, "mobilize": false},
+    {"id": "H07", "group": "hard", "text": "この増税案には絶対反対。暮らしがもっと苦しくなるだけだ", "lump": false, "contempt": false, "exclusion": false, "mobilize": false},
+    {"id": "H08", "group": "hard", "text": "日本のアニメは背景美術が本当に丁寧。海外の作品と見比べるとよくわかる", "lump": false, "contempt": false, "exclusion": false, "mobilize": false},
+    {"id": "H09", "group": "hard", "text": "この国の夏は湿気がすごくて、洗濯物がまったく乾かない", "lump": false, "contempt": false, "exclusion": false, "mobilize": false},
+    {"id": "H10", "group": "hard", "text": "このラーメン、スープが濃すぎて舌がしびれた。二度と頼まない", "lump": false, "contempt": false, "exclusion": false, "mobilize": false},
+    {"id": "H11", "group": "hard", "text": "この調査、回答者がたった百人なのに、全体の傾向みたいに書かれてるのが気になる", "lump": false, "contempt": false, "exclusion": false, "mobilize": false},
+    {"id": "H12", "group": "hard", "text": "ファンのみんな、今日は寒い中来てくれて本当にありがとう！", "lump": false, "contempt": false, "exclusion": false, "mobilize": false},
+    {"id": "H13", "group": "hard", "text": "「〇〇人はみんな怠け者」って言う人、実際に〇〇人と働いたことあるのかな", "lump": false, "contempt": false, "exclusion": false, "mobilize": false},
+    {"id": "H14", "group": "hard", "text": "看護師さんたち、いつも夜遅くまで本当にありがとうございます", "lump": false, "contempt": false, "exclusion": false, "mobilize": false},
+    {"id": "H15", "group": "hard", "text": "小説を書くと会話文ばかりになる。地の文を増やす練習をしたい", "lump": false, "contempt": false, "exclusion": false, "mobilize": false},
+    {"id": "H16", "group": "hard", "text": "「努力すれば誰でも成功できる」なんて言う人には、まず運の良さを数えてほしいもんですな", "lump": false, "contempt": false, "exclusion": false, "mobilize": false},
+    {"id": "X09", "group": "exclusion", "text": "△△系の住民は全員送り返せ。この街に置いておく理由はない", "lump": true, "contempt": false, "exclusion": true, "mobilize": false},
+    {"id": "X10", "group": "exclusion", "text": "子連れはこの店に入れるな。静かに過ごしたい客の迷惑だ", "lump": true, "contempt": false, "exclusion": true, "mobilize": false}
   ]
 }

@@ -1,19 +1,19 @@
 // group-probe.js の結果を、tools/eval/groups.json の期待値と突き合わせる（DESIGN.md D15）。
-// node tools/group_stats.js <結果の JSON（window.__R）> [新しい問いの版。既定 group1]
+// node tools/group_stats.js <結果の JSON（window.__R）> [新しい問いの版。既定 group1] [例文の JSON。既定 tools/eval/groups.json]
 // 新しい問い（group1）: 問いごとに、当てた数・見落とし・言いすぎ（過検出）を出す。2 回の答えが割れた数も出す。
 // 今の問い（old）: 怒り≧70・敵意≧70 を「強い」としたとき、グループごとに何本が強いと数えられたかを出す（比べるため）
 const fs = require("fs"), path = require("path");
-const posts = require(path.join(__dirname, "eval", "groups.json")).posts;
+const posts = JSON.parse(fs.readFileSync(process.argv[4] || path.join(__dirname, "eval", "groups.json"), "utf8")).posts;
 const R = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
 const byId = Object.fromEntries(posts.map((p) => [p.id, p]));
-const Q = ["lump", "contempt", "exclusion", "mobilize"];
+const NEW = process.argv[3] || "group1";
+const Q = ["lump", "contempt", "exclusion", ...(NEW.startsWith("group") ? ["mobilize"] : [])]; // ev1・sep1 は動員を聞かない
 const groups = [...new Set(posts.map((p) => p.group))];
 
 const errors = R.filter((r) => r.error);
 console.log(`結果 ${R.length} 件、失敗 ${errors.length} 件`);
 
 // group1: 2 回のうち 1 回でも true なら true（多数決は 2 回だと決まらないので、「どちらか」と「両方」を並べる）
-const NEW = process.argv[3] || "group1";
 const g = R.filter((r) => r.v === NEW && !r.error);
 const ans = {};
 for (const r of g) for (const q of Q) ((ans[r.id] ??= {})[q] ??= []).push(r[q]);

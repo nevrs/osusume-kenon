@@ -1,8 +1,8 @@
 // 人をひとまとめに括る言葉の判定（DESIGN.md D15）を、Chrome の組み込み AI（Prompt API）で試す。ページの開発者ツールのコンソールで動かす（X では動かさない）。
-// 使い方: window.__ITEMS = [{id, text}]、window.__RUNS = 回数、window.__VARIANTS = ["old", "group1"] を入れてから、このファイルの中身を貼る。
+// 使い方: window.__ITEMS = [{id, text}]、window.__RUNS = 回数、window.__VARIANTS = ["group1", "ev1"] を入れてから、このファイルの中身を貼る。
 // 結果は window.__R（{v, run, id, ...答え, ms}）に入り、終わると window.__done が true になる。集計は tools/group_stats.js
 {
-  const LANG = { expectedInputs: [{ type: "text", languages: ["ja"] }], expectedOutputs: [{ type: "text", languages: ["ja"] }] };
+  const LANG = { expectedInputs: [{ type: "text", languages: ["ja", "en"] }], expectedOutputs: [{ type: "text", languages: ["ja"] }] };
   const SCORE = { type: "integer", minimum: 0, maximum: 100 };
   const BOOL = { type: "boolean" };
   // 前の判定（0.10 までの feed-judge.js の split1）。比べるために同じ文
@@ -31,21 +31,63 @@
     },
   };
   VARIANTS.group2 = { ...VARIANTS.group1, system: GROUP2 };
+  // ev1・sep1: true/false の代わりに、根拠の言葉を本文から抜き出させる。抜き出した言葉が本文に無ければ当てはまらないとする
+  // （group1 は実際の投稿で、架空の人物・作品・機械への言葉まで「はい」と答えた。根拠を求め、コードで確かめて、思い込みの「はい」をはじく）
+  const EV_HEAD = "あなたは SNS の投稿を読み、次の言葉を投稿の本文からそのまま抜き出して答える。当てはまる言葉が無ければ空の文字列にする。迷ったら空にする。投稿の主張が正しいか、どの立場の意見かは問わない。他人の言葉を引用して批判している・皮肉っているだけなら空にする。";
+  const EV = {
+    group: "group（ひとまとめ）: 実在の人々の集団（国籍・民族・性別・世代・職業・地域・宗教・政治的立場など）を指す言葉のうち、その集団の人々がみな同じ性質を持つかのように語られているもの（例「〇〇人はみんな〜」の「〇〇人」）。特定の個人・会社・役所・作品・機械・物語やゲームの登場人物や種族は含めない。ひとまとめにすることを批判している文なら空。",
+    insult: "insult（見下し）: 実在の人や集団に向けた、侮辱する・見下す・人間扱いしない言葉（例「バカ」「ゴミ」「虫」「無能」）。作品・会社・機械・AI・制度・物事に向けた言葉は含めない。",
+    exclusion: "exclusion（排除）: 実在の人や集団を、追い出す・権利を奪う・黙らせる・社会から消す・暴力を加えることを求める言葉（例「出ていけ」「追い出せ」）。投票しないなど本人の選択や、法に沿った処罰の議論は含めない。",
+  };
+  const STR = { type: "string" };
+  const evSchema = (ks) => ({ type: "object", properties: Object.fromEntries(ks.map((k) => [k, STR])), required: ks });
+  const norm = (x) => String(x).normalize("NFKC").replace(/[\s「」『』"'“”]/g, "");
+  const found = (w, text) => typeof w === "string" && norm(w).length > 0 && norm(text).includes(norm(w));
+  const evPick = (o, text) => ({ lump: found(o.group, text), contempt: found(o.insult, text), exclusion: found(o.exclusion, text), mobilize: false, ev: [o.group, o.insult, o.exclusion] });
+  // ev1: 3 つを 1 回で聞く
+  VARIANTS.ev1 = { system: [EV_HEAD, EV.group, EV.insult, EV.exclusion].join("\n"), schema: evSchema(["group", "insult", "exclusion"]), pick: evPick };
+  // sep1: 1 つずつ別に聞く（3 回。遅いが、問い同士が混ざらない）
+  VARIANTS.sep1 = { parts: ["group", "insult", "exclusion"].map((k) => ({ system: [EV_HEAD, EV[k]].join("\n"), schema: evSchema([k]) })), pick: evPick };
+  // ev2: ev1 で AI が問いの中の例（「〇〇人」「バカ」など）を書き写したので、例を抜く。ひとまとめは「集団の言葉」と「決めつけた性質」の両方を求める。
+  // 言い換え（「△△系の住民」→「△△系の人々」）を拾うため、本文と 6 割以上が続けて重なれば本文にあるとみなす。長い答えで止まる（ev1・sep1 で 1 回 9 分）のを防ぐため短く答えさせる
+  const EV2_HEAD = "あなたは SNS の投稿を読み、次の言葉を投稿の本文から短く（それぞれ 20 文字以内で）そのまま抜き出して答える。当てはまる言葉が無ければ空の文字列にする。迷ったら空にする。投稿の主張が正しいか、どの立場の意見かは問わない。他人の言葉を引用して批判している・皮肉っているだけなら、すべて空にする。";
+  const EV2 = [
+    "group と trait（ひとまとめ）: 実在の人々の集団（国籍・民族・性別・世代・職業・地域・宗教・政治的立場など）について、その集団の人々がみな同じ性質を持つと決めつけている場合に、group にその集団を指す言葉、trait に決めつけた性質を入れる。特定の個人・会社・役所・作品・機械・物語やゲームの登場人物や種族のことなら空。ひとまとめにすることを批判している文なら空。",
+    "insult（見下し）: 実在の人や集団を、侮辱する・見下す・人間扱いしない言葉。作品・会社・機械・AI・制度・物事に向けた言葉なら空。",
+    "exclusion（排除）: 実在の人や集団を、追い出す・権利を奪う・黙らせる・社会から消す・暴力を加えることを求める言葉。投票しないなど本人の選択や、法に沿った処罰の議論なら空。",
+  ];
+  const overlap = (w, text) => { // w のうち、本文と続けて重なるいちばん長い部分の割合
+    const a = norm(w), b = norm(text);
+    let best = 0;
+    for (let i = 0; i < a.length; i++) for (let j = i + best + 1; j <= a.length; j++) { if (b.includes(a.slice(i, j))) best = j - i; else break; }
+    return a.length ? best / a.length : 0;
+  };
+  const near = (w, text) => typeof w === "string" && norm(w).length >= 2 && overlap(w, text) >= 0.6;
+  VARIANTS.ev2 = {
+    system: [EV2_HEAD, ...EV2].join("\n"),
+    schema: evSchema(["group", "trait", "insult", "exclusion"]),
+    pick: (o, text) => ({ lump: near(o.group, text) && near(o.trait, text), contempt: near(o.insult, text), exclusion: near(o.exclusion, text), mobilize: false, ev: [o.group, o.trait, o.insult, o.exclusion] }),
+  };
   window.__R = [];
   window.__done = false;
   (async () => {
     try {
       const names = window.__VARIANTS || Object.keys(VARIANTS);
+      const parts = (v) => VARIANTS[v].parts || [VARIANTS[v]];
       const bases = {};
-      for (const v of names) bases[v] = await LanguageModel.create({ ...LANG, initialPrompts: [{ role: "system", content: VARIANTS[v].system }] });
+      for (const v of names) bases[v] = await Promise.all(parts(v).map((p) => LanguageModel.create({ ...LANG, initialPrompts: [{ role: "system", content: p.system }] })));
       for (let run = 1; run <= (window.__RUNS || 1); run++) for (const it of window.__ITEMS) for (const v of names) {
-        const s = await bases[v].clone(); // 文ごとに前の文の影響を残さない
         const t0 = performance.now();
         let p = {};
-        try { p = VARIANTS[v].pick(JSON.parse(await s.prompt(`投稿:\n${it.text}`, { responseConstraint: VARIANTS[v].schema }))); }
-        catch (e) { p = { error: String(e).slice(0, 120) }; }
+        try {
+          const o = {};
+          for (const [i, part] of parts(v).entries()) {
+            const s = await bases[v][i].clone(); // 文ごとに前の文の影響を残さない
+            try { Object.assign(o, JSON.parse(await s.prompt(`投稿:\n${it.text}`, { responseConstraint: part.schema }))); } finally { s.destroy(); }
+          }
+          p = VARIANTS[v].pick(o, it.text);
+        } catch (e) { p = { error: String(e).slice(0, 120) }; }
         window.__R.push({ v, run, id: it.id, ...p, ms: Math.round(performance.now() - t0) });
-        s.destroy();
       }
     } catch (e) { window.__err = String(e); }
     window.__done = true;

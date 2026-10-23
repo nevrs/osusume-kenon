@@ -34,7 +34,7 @@ function setup(stored = {}) {
 }
 
 // 今の問い（D15）で判定済みの記録。hit なら「ひとまとめ」に当てはまる
-const J = (feed, ts, hit, extra = {}) => ({ feed, ts, g: hit ? 1 : 0, c: 0, x: 0, m: 0, jv: "group1/c155", ...extra });
+const J = (feed, ts, hit, extra = {}) => ({ feed, ts, g: hit ? 1 : 0, c: 0, x: 0, jv: "ev1/c155", ...extra });
 // n 件の判定済み（当てはまるのは hits 件）
 function many(prefix, feed, n, hits, ts = now - 1000) {
   const o = {};
@@ -164,9 +164,9 @@ const check = (name, ok, detail) => results.push(`${ok ? "OK" : "NG"}  ${name}${
   check("表に「どれか」「ひとまとめ」「見下し」「排除」の列がある", ["どれか", "ひとまとめ", "見下し", "排除"].every((h) => [...t.d.querySelectorAll("#trendTable th")].some((th) => th.textContent === h)));
 
   // 前の問い（怒り・敵意の点）の記録は数えず、件数を知らせる
-  t = setup({ ...many("a", "for-you", 40, 20), ...many("b", "following", 40, 4), "rec:l": { feed: "for-you", ts: now - 1000, a: 90, h: 90, jv: "split1/c155" } });
+  t = setup({ ...many("a", "for-you", 40, 20), ...many("b", "following", 40, 4), "rec:l": { feed: "for-you", ts: now - 1000, a: 90, h: 90, jv: "split1/c155" }, "rec:m": J("for-you", now - 1000, true, { m: 0, jv: "group1/c155" }) });
   await wait(400);
-  check("前の判定の記録は割合に入れず、「数えていません」と件数を出す", t.text("trendNote").includes("おすすめ 50%") && t.text("trendNote").includes("前の判定（怒り・敵意の点）の記録 1 件は数えていません"), t.text("trendNote"));
+  check("前の判定の記録は割合に入れず、「数えていません」と件数を出す", t.text("trendNote").includes("おすすめ 50%") && t.text("trendNote").includes("前の判定（怒り・敵意の点や、0.11 の「はい／いいえ」の判定）の記録 2 件は数えていません"), t.text("trendNote"));
 
   // 判定の見本: 閉じている間は出さない。開くと 10 件（本文と判定）。当てはまったものだけにも切り替えられる
   t = setup({ ...many("a", "for-you", 20, 5), ...many("b", "following", 20, 0), "rec:x": { text: "消えた本文の記録", feed: "for-you", ts: now - 1000 } });
@@ -182,6 +182,19 @@ const check = (name, ok, detail) => results.push(`${ok ? "OK" : "NG"}  ${name}${
   await wait(100);
   const hitItems = [...t.d.querySelectorAll("#sampleList .sample")];
   check("「当てはまったものだけ」で、当てはまったものだけを出す（ボタンの文も切り替わる）", hitItems.length === 5 && hitItems.every((i) => i.querySelector(".meta b")?.textContent === "ひとまとめ") && t.text("sampleHit").includes("無作為に戻す"), String(hitItems.length));
+  let clip = null;
+  Object.defineProperty(t.w, "navigator", { value: { clipboard: { writeText: async (s) => { clip = s; } }, userAgent: "" }, configurable: true });
+  t.click("sampleCopy");
+  await wait(50);
+  const blocks = (clip || "").split("\n\n");
+  check("見本のコピー: 出ている見本を、見出し（版）と「画面 · 日付 · 判定」＋本文の形でそのまま写す", blocks.length === 6 && blocks[0].includes("ev1/c155") && blocks.slice(1).every((b) => /^おすすめ · .+ · ひとまとめ\n本文/.test(b)), JSON.stringify(clip).slice(0, 200));
+  check("見本のコピーのあと、貼る先に気をつけるよう知らせる", /貼る先に気をつけて/.test(t.d.body.textContent));
+  t = setup({});
+  await wait(100);
+  t.d.getElementById("sampleBox").open = true;
+  t.click("sampleMore");
+  await wait(100);
+  check("見本が無いときは、コピーを押せない", t.d.getElementById("sampleCopy").disabled === true);
 
   // 画面の組み立てに innerHTML を使っていない（本文のような外の文字が入る場所は無いが、決まりとして確かめる）
   const src = fs.readFileSync(path.join(repo, "options.js"), "utf8");

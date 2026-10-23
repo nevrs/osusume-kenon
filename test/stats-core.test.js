@@ -6,7 +6,7 @@ const { shzTally, shzTallyByDay, shzShare, shzVersions, shzSessionProgress, SHZ_
 const DAY = 86_400_000;
 const noon = new Date(2026, 9, 21, 12).getTime(); // この端末の 10/21 正午
 // 今の問いで判定済みの記録。g = ひとまとめ、c = 見下し、x = 排除
-const j = (feed, ts, g = 0, c = 0, x = 0, jv = "group1/c155") => ({ feed, ts, g, c, x, m: 0, jv });
+const j = (feed, ts, g = 0, c = 0, x = 0, jv = "ev1/c155") => ({ feed, ts, g, c, x, jv });
 
 test("feed ごとに、記録・判定済み・ひとまとめ・見下し・排除・どれか を数える。未判定と前の問いの記録は数えない（前の問いは件数だけ）", () => {
   const recs = {
@@ -48,7 +48,7 @@ test("割合は判定済みが少ないと出さない", () => {
 });
 
 test("判定の版が混ざっていれば分かる。未判定は数えない", () => {
-  assert.deepEqual(shzVersions({ a: j("for-you", noon, 1, 1, 0, "group1/c155"), b: j("for-you", noon, 1, 1, 0, "group1/c156"), c: { feed: "for-you", ts: noon, text: "x" } }), ["group1/c155", "group1/c156"]);
+  assert.deepEqual(shzVersions({ a: j("for-you", noon, 1, 1, 0, "ev1/c155"), b: j("for-you", noon, 1, 1, 0, "ev1/c156"), c: { feed: "for-you", ts: noon, text: "x" } }), ["ev1/c155", "ev1/c156"]);
   assert.deepEqual(shzVersions({ a: { feed: "for-you", ts: noon, g: 1, c: 0, x: 0 } }), ["不明"]);
   assert.deepEqual(shzVersions({ a: { feed: "for-you", ts: noon, h: 1, a: 1, jv: "split1/c155" } }), []); // 前の問いは数えないので版にも出さない
 });
@@ -69,7 +69,7 @@ test("測定モードの進み具合: 始める前の記録は数えず、両方
   assert.equal(shzSessionProgress(recs, { ...session, end: noon + 100 }, noon + 1000).tally.following.seen, 2); // 終えたあとの記録は数えない
 });
 
-test("判定の見本: 本文のある判定済みだけから、おすすめ・フォロー中を半分ずつ選ぶ。本文・feed・時刻・答えだけを返す", () => {
+test("判定の見本: 本文のある判定済みだけから、おすすめ・フォロー中を半分ずつ選ぶ。本文・feed・時刻・答え・版だけを返す", () => {
   const { shzSample } = require("../stats-core.js");
   const recs = {};
   for (let i = 0; i < 20; i++) recs[`rec:f${i}`] = { text: `おすすめ${i}`, feed: "for-you", ts: noon, g: i % 2, c: 0, x: 0, m: 0, jv: "v" };
@@ -81,7 +81,7 @@ test("判定の見本: 本文のある判定済みだけから、おすすめ・
   assert.equal(s.length, 10);
   assert.equal(s.filter((r) => r.feed === "for-you").length, 5);
   assert.ok(s.every((r) => r.text && r.text !== "未判定" && r.text !== "前の問い"));
-  assert.deepEqual(Object.keys(s[0]).sort(), ["c", "feed", "g", "text", "ts", "x"]);
+  assert.deepEqual(Object.keys(s[0]).sort(), ["c", "feed", "g", "jv", "text", "ts", "x"]);
 });
 
 test("判定の見本: 片方が足りなければ他方で埋める。hitOnly は、どれかに当てはまったものだけ", () => {

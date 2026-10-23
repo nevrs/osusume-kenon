@@ -1,12 +1,13 @@
 // 記録した投稿の判定（DESIGN.md D10・D15）。設定で記録をオンにしているとき（または測定モードの間）だけ動く。
-// 本文を Chrome の組み込み AI（端末の中）に読ませ、ひとまとめ（g）・見下し（c）・排除（x）・動員（m）の答え（0/1）を記録に書き足す。外へは何も送らない。
-// 問いは tools/group-probe.js の group1 と同じ（research/group-record.md で測ったもの）。変えるときは両方を直して測り直し、SHZ_FJ.version を上げる。
-// 動員は数に使わない（排除と分けられなかった）が、あとで調べるために残す。
-// 前の問い（怒り a・敵意 h の 0〜100。版 split1）で判定した記録は、本文が残っていれば、この問いで判定し直す（a・h は消す）。
+// 本文を Chrome の組み込み AI（端末の中）に読ませ、ひとまとめ（g）・見下し（c）・排除（x）の答え（0/1）を記録に書き足す。外へは何も送らない。
+// はい／いいえではなく、根拠の言葉を本文から抜き出させ、その言葉が本文に本当にあるときだけ当てはまるとする（DESIGN.md D16）。
+// 問いは tools/group-probe.js の ev1 と同じ（research/group-record.md で測ったもの）。変えるときは両方を直して測り直し、SHZ_FJ.version を上げる。
+// 前の問い（怒り a・敵意 h。版 group1 の g・c・x・m）で判定した記録は、本文が残っていれば、この問いで判定し直す（前の答えは消す）。
 // 普段（パッシブ）は、画面を開いているあいだ、間を空けて 1 件ずつ・1 日の上限つき。測定モード（アクティブ）の間は上限なしで、間を短くする。
 
 const SHZ_FJ = {
-  version: "group1", // 問いの版。答え方が変わったら上げる（記録に残す）
+  version: "ev1", // 問いの版。答え方が変わったら上げる（記録に残す）
+  timeoutMs: 30_000, // 1 件の判定の打ち切り（AI が長い答えを書き続けて 9 分止まったことがある）
   gapMs: 2500, // 1 件ごとの間（パッシブ）
   sessionGapMs: 300, // 1 件ごとの間（測定モード）
   tickMs: 60_000, // 未判定が無いか見に行く間隔
@@ -15,15 +16,16 @@ const SHZ_FJ = {
   lockMs: 15_000, // 別のタブが判定している間、割り込まない時間
 };
 const SHZ_FJ_SYSTEM = [
-  "あなたは SNS の投稿を読み、次の 4 つの問いに true か false で答える。投稿の主張が正しいか、どの立場の意見かは問わない。言葉の形だけを見る。迷ったら false。",
-  "lump（ひとまとめ）: 国籍・民族・性別・世代・職業・地域・宗教・政治的立場などの集団に属する人々を、みな同じ性質を持つかのように語っている（例「〇〇人は〜」「最近の若者は〜」「〇〇の支持者は〜」）。特定の個人、特定の会社や役所、その具体的な行いについて述べるだけなら false。ひとまとめにすることを批判している文も false。",
-  "contempt（見下し）: 人や集団を、侮辱する・見下す・人間扱いしない言葉がある（「バカ」「ゴミ」「虫」「こいつら」「無能」など）。物事・制度・行いへの批判だけなら false。",
-  "exclusion（排除）: 人や集団を、追い出す・権利を奪う・黙らせる・社会から消す・暴力を加えることを求めている、または当然だとしている。特定の人の違法行為を法に沿って罰することを論じるだけなら false。投票しないなど、本人の選択を述べるだけなら false。",
-  "mobilize（動員）: 読む人に、怒る・攻撃する・拡散する・抗議を集めることを、強い言葉で促している（「許すな」「今すぐ拡散」「黙っているのも同罪」「目を覚ませ」）。",
+  "あなたは SNS の投稿を読み、次の言葉を投稿の本文からそのまま抜き出して答える。当てはまる言葉が無ければ空の文字列にする。迷ったら空にする。投稿の主張が正しいか、どの立場の意見かは問わない。他人の言葉を引用して批判している・皮肉っているだけなら空にする。",
+  "group（ひとまとめ）: 実在の人々の集団（国籍・民族・性別・世代・職業・地域・宗教・政治的立場など）を指す言葉のうち、その集団の人々がみな同じ性質を持つかのように語られているもの（例「〇〇人はみんな〜」の「〇〇人」）。特定の個人・会社・役所・作品・機械・物語やゲームの登場人物や種族は含めない。ひとまとめにすることを批判している文なら空。",
+  "insult（見下し）: 実在の人や集団に向けた、侮辱する・見下す・人間扱いしない言葉（例「バカ」「ゴミ」「虫」「無能」）。作品・会社・機械・AI・制度・物事に向けた言葉は含めない。",
+  "exclusion（排除）: 実在の人や集団を、追い出す・権利を奪う・黙らせる・社会から消す・暴力を加えることを求める言葉（例「出ていけ」「追い出せ」）。投票しないなど本人の選択や、法に沿った処罰の議論は含めない。",
 ].join("\n");
-const SHZ_FJ_BOOL = { type: "boolean" };
-const SHZ_FJ_QS = ["lump", "contempt", "exclusion", "mobilize"];
-const SHZ_FJ_SCHEMA = { type: "object", properties: Object.fromEntries(SHZ_FJ_QS.map((q) => [q, SHZ_FJ_BOOL])), required: SHZ_FJ_QS };
+const SHZ_FJ_QS = ["group", "insult", "exclusion"];
+const SHZ_FJ_SCHEMA = { type: "object", properties: Object.fromEntries(SHZ_FJ_QS.map((q) => [q, { type: "string" }])), required: SHZ_FJ_QS };
+// 抜き出した言葉が本文にあるか（空白・かぎかっこ・引用符と、全角半角の違いは見ない）。AI は問いの中の例を書き写すことがあり、それをはじく
+const shzFjNorm = (s) => String(s).normalize("NFKC").replace(/[\s「」『』"'“”]/g, "");
+const shzFjFound = (w, text) => typeof w === "string" && shzFjNorm(w).length > 0 && shzFjNorm(text).includes(shzFjNorm(w));
 const SHZ_FJ_LANG = { expectedInputs: [{ type: "text", languages: ["ja", "en"] }], expectedOutputs: [{ type: "text", languages: ["ja"] }] };
 
 const shzFjTab = Math.random().toString(36).slice(2); // このタブの印（判定を同時に回さないため）
@@ -44,7 +46,7 @@ async function shzFjMakeBase() {
 // 失敗の理由（エラーの種類と文。本文は入れない。診断に出す）
 const shzFjErr = (e) => `${e?.name || "Error"}: ${e?.message || e}`.slice(0, 160);
 
-// 1 件を判定して {g, c, x, m}（0/1）を返す。組み込み AI が使えなければ null、その 1 件だけが失敗したら {failed: true, err}
+// 1 件を判定して {g, c, x}（0/1）を返す。組み込み AI が使えなければ null、その 1 件だけが失敗したら {failed: true, err}
 async function shzFeedJudge(text) {
   if (typeof LanguageModel === "undefined") { shzLog("judge", "no-LanguageModel"); return null; }
   const pending = (shzFjBase ??= shzFjMakeBase());
@@ -68,16 +70,19 @@ async function shzFeedJudge(text) {
     if (shzFjBase === pending) { shzFjBase = null; base.destroy(); } // 元が壊れている。次に作り直す
     return null;
   }
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), SHZ_FJ.timeoutMs);
   try {
-    const out = await s.prompt(`投稿:\n${text}`, { responseConstraint: SHZ_FJ_SCHEMA });
+    const out = await s.prompt(`投稿:\n${text}`, { responseConstraint: SHZ_FJ_SCHEMA, signal: ac.signal });
     let o;
     try { o = JSON.parse(out); } catch { shzLog("judge", "bad-json", { outLen: String(out).length }); return { failed: true, err: "bad-json" }; } // パースのエラー文には AI の出力が入るので、残さない
-    if (!SHZ_FJ_QS.every((q) => typeof o?.[q] === "boolean")) return { failed: true, err: "not-a-boolean" };
-    return { g: +o.lump, c: +o.contempt, x: +o.exclusion, m: +o.mobilize };
+    if (!SHZ_FJ_QS.every((q) => typeof o?.[q] === "string")) return { failed: true, err: "not-a-string" };
+    return { g: +shzFjFound(o.group, text), c: +shzFjFound(o.insult, text), x: +shzFjFound(o.exclusion, text) }; // 抜き出した言葉は本文の一部なので、記録にもログにも残さない
   } catch (e) {
     shzLog("judge", "prompt-error", { err: shzFjErr(e), len: text.length });
-    return { failed: true, err: shzFjErr(e) }; // この 1 件だけの失敗（長すぎる本文など）。元は壊さない
+    return { failed: true, err: shzFjErr(e) }; // この 1 件だけの失敗（長すぎる本文・打ち切りなど）。元は壊さない
   } finally {
+    clearTimeout(timer);
     s?.destroy();
   }
 }
@@ -120,14 +125,14 @@ async function shzFjRun() {
       if (!cur || !cur.text || shzIsJudged(cur)) continue;
       const t0 = Date.now();
       const res = await shzFeedJudge(cur.text);
-      shzLog("judge", "record-judged", res ? (res.failed ? { failed: res.err } : { ms: Date.now() - t0, g: res.g, c: res.c, x: res.x, m: res.m }) : "ai-unavailable");
+      shzLog("judge", "record-judged", res ? (res.failed ? { failed: res.err } : { ms: Date.now() - t0, g: res.g, c: res.c, x: res.x }) : "ai-unavailable");
       if (!res) return; // 組み込み AI が使えない。次の見回りで確かめ直す
       if (res.failed) { shzFjSkip.add(k); await shzFjSleep(fast ? SHZ_FJ.sessionGapMs : SHZ_FJ.gapMs); continue; } // この 1 件だけの失敗。後ろの記録は続ける（間は空ける）
       const latest = (await chrome.storage.local.get(k))[k];
       if (!latest) continue; // 判定している間に消された
       // 読んでから書くまでの間に、消す操作が割り込んでも本文を戻さない: 書いたあとで、消す操作の目印が変わっていないか見て、変わっていれば消し直す
-      const { a, h, ...rest } = latest; // 前の問いの点は消す（同じ記録に 2 つの物差しを残さない）
-      const ans = { g: res.g, c: res.c, x: res.x, m: res.m, jv: shzFjVersion() };
+      const { a, h, m, ...rest } = latest; // 前の問いの答えは消す（同じ記録に 2 つの物差しを残さない。g・c・x・jv は下で上書き）
+      const ans = { g: res.g, c: res.c, x: res.x, jv: shzFjVersion() };
       await chrome.storage.local.set({ [k]: { ...rest, ...ans }, ...(fast ? {} : { judgeDay: { d: today, n: used + 1 } }) });
       const after = await chrome.storage.local.get({ recordClearedAt: 0, textClearedAt: 0 });
       if (after.recordClearedAt !== st.recordClearedAt) await chrome.storage.local.remove(k); // 「すべて消す」が割り込んだ

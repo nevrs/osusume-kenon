@@ -6,7 +6,8 @@ const { JSDOM } = require(path.join(mods, "jsdom"));
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const DAY = 86_400_000;
 
-// 偽の AI: 「馬鹿」を含めば ひとまとめ・見下し、「!」を含めば 動員、それ以外は全部 false。availability を差し替えられる
+// 偽の AI: 「馬鹿」を含めば ひとまとめ・見下しの欄に「馬鹿」、「出ていけ」を含めば 排除の欄に「出ていけ」を抜き出す。
+// 「!」を含めば、本文に無い「〇〇人」をひとまとめの欄に書く（問いの例を書き写す癖のまね）。「止まる」を含めば、打ち切られるまで答えない。availability を差し替えられる
 function setup({ stored = {}, cap = 300, availability = "available", aiDelay = 0, recordEnabled = true, session = null, hidden = false, noAI = false, onSet = null } = {}) {
   const dom = new JSDOM("<body></body>", { url: "https://x.com/home", runScripts: "outside-only", pretendToBeVisual: true });
   const w = dom.window;
@@ -16,13 +17,15 @@ function setup({ stored = {}, cap = 300, availability = "available", aiDelay = 0
   const listeners = [];
   const calls = { prompts: [], creates: 0, concurrent: 0, maxConcurrent: 0 };
   const clone = () => ({
-    prompt: async (p) => {
+    prompt: async (p, opts) => {
       calls.prompts.push(p);
       calls.concurrent++; calls.maxConcurrent = Math.max(calls.maxConcurrent, calls.concurrent);
       if (aiDelay) await wait(aiDelay);
       calls.concurrent--;
       if (/壊れる/.test(p)) throw new Error("この 1 件だけ失敗");
-      return JSON.stringify({ lump: /馬鹿/.test(p), contempt: /馬鹿/.test(p), exclusion: false, mobilize: /!/.test(p) });
+      if (/止まる/.test(p)) return new Promise((_, rej) => opts.signal.addEventListener("abort", () => rej(new w.DOMException("aborted", "AbortError"))));
+      const m = (re, word) => (re.test(p) ? word : "");
+      return JSON.stringify({ group: m(/馬鹿/, "馬鹿") || m(/!/, "〇〇人"), insult: m(/馬鹿/, "馬鹿"), exclusion: m(/出ていけ/, "出ていけ") });
     },
     destroy() {},
   });
@@ -48,7 +51,7 @@ function setup({ stored = {}, cap = 300, availability = "available", aiDelay = 0
   // 間を縮める。feed-judge.js は設定を const に置いていて、あとの eval からは見えないので、読み込む前に文字を置き換える
   const swap = (src, from, to) => { if (!src.includes(from)) throw new Error(`置き換え先が見つからない: ${from}`); return src.replace(from, to); };
   let fj = fs.readFileSync(path.join(repo, "feed-judge.js"), "utf8");
-  for (const [from, to] of [["gapMs: 2500", "gapMs: 20"], ["sessionGapMs: 300", "sessionGapMs: 5"], ["tickMs: 60_000", "tickMs: 100000"], ["startDelayMs: 8000", "startDelayMs: 10"], ["lockMs: 15_000", "lockMs: 400"], ["dailyCap: 300", `dailyCap: ${cap}`]]) fj = swap(fj, from, to);
+  for (const [from, to] of [["gapMs: 2500", "gapMs: 20"], ["sessionGapMs: 300", "sessionGapMs: 5"], ["tickMs: 60_000", "tickMs: 100000"], ["startDelayMs: 8000", "startDelayMs: 10"], ["lockMs: 15_000", "lockMs: 400"], ["dailyCap: 300", `dailyCap: ${cap}`], ["timeoutMs: 30_000", "timeoutMs: 150"]]) fj = swap(fj, from, to);
   w.eval([fs.readFileSync(path.join(repo, "x-dom.js"), "utf8"), fs.readFileSync(path.join(repo, "record-core.js"), "utf8"), fs.readFileSync(path.join(repo, "log.js"), "utf8"), fj].join(";\n"));
   const fire = (c) => { for (const f of listeners) f(c, "local"); };
   return { w, store, calls, ai, fire, run: () => w.eval("shzFjRun()") };
@@ -62,16 +65,18 @@ const check = (name, ok, detail) => results.push(`${ok ? "OK" : "NG"}  ${name}${
 
 (async () => {
   // 基本: 判定して答えと版を書き足す。本文・feed・時刻は変えない
-  let t = setup({ stored: { "rec:a": rec("馬鹿じゃないの"), "rec:b": rec("いい天気", Date.now(), "following"), "rec:c": rec("すごい!") } });
+  let t = setup({ stored: { "rec:a": rec("馬鹿じゃないの"), "rec:b": rec("いい天気", Date.now(), "following"), "rec:c": rec("すごい!"), "rec:d": rec("よそ者は出ていけ") } });
   await wait(400);
-  const a = t.store["rec:a"], b = t.store["rec:b"], c = t.store["rec:c"];
-  check("未判定の記録に、ひとまとめ・見下し・排除・動員の答え（0/1）と版を書く", a.g === 1 && a.c === 1 && a.x === 0 && a.m === 0 && b.g === 0 && b.c === 0 && c.m === 1 && c.g === 0 && a.jv === "group1/c155", JSON.stringify([a, c]));
+  const a = t.store["rec:a"], b = t.store["rec:b"], c = t.store["rec:c"], d = t.store["rec:d"];
+  check("未判定の記録に、ひとまとめ・見下し・排除の答え（0/1）と版を書く", a.g === 1 && a.c === 1 && a.x === 0 && b.g === 0 && b.c === 0 && d.x === 1 && d.g === 0 && a.jv === "ev1/c155" && !("m" in a), JSON.stringify([a, d]));
+  check("AI が抜き出した言葉が本文に無ければ、当てはまらないとする", c.g === 0 && c.c === 0 && c.x === 0, JSON.stringify(c));
+  check("抜き出した言葉は記録に残さない", Object.keys(a).sort().join() === "c,feed,g,jv,text,ts,x", JSON.stringify(a));
   check("本文・おすすめ/フォロー中・時刻は変えない", a.text === "馬鹿じゃないの" && a.feed === "for-you" && b.feed === "following" && typeof a.ts === "number");
   check("AI の元は 1 回だけ作る", t.calls.creates === 1);
   check("同時に 2 件は判定しない", t.calls.maxConcurrent === 1);
   check("問いは「投稿:」と本文だけ（キー・投稿者名などを渡さない）", t.calls.prompts.every((p) => p.startsWith("投稿:\n")) && !t.calls.prompts.join("").includes("rec:"));
   await t.run();
-  check("判定済みは、もう一度回しても判定し直さない", t.calls.prompts.length === 3);
+  check("判定済みは、もう一度回しても判定し直さない", t.calls.prompts.length === 4);
 
   // 動作ログ（オンのときだけ。本文・キーを入れない）
   t = setup({ stored: { debugEnabled: true, "rec:a": rec("馬鹿じゃないの"), "rec:b": rec("壊れる投稿") } });
@@ -158,13 +163,17 @@ const check = (name, ok, detail) => results.push(`${ok ? "OK" : "NG"}  ${name}${
   t = setup({ stored: { "rec:a": { text: "馬鹿ばっかり", feed: "for-you", ts: Date.now(), a: 80, h: 90, jv: "split1/c155" } } });
   await wait(300);
   const ra = t.store["rec:a"];
-  check("前の問いの判定は、本文があれば新しい問いで判定し直し、怒り・敵意の点は消す", ra.g === 1 && ra.c === 1 && !("a" in ra) && !("h" in ra) && ra.jv === "group1/c155" && ra.text === "馬鹿ばっかり", JSON.stringify(ra));
+  check("前の問いの判定は、本文があれば新しい問いで判定し直し、怒り・敵意の点は消す", ra.g === 1 && ra.c === 1 && !("a" in ra) && !("h" in ra) && ra.jv === "ev1/c155" && ra.text === "馬鹿ばっかり", JSON.stringify(ra));
+  t = setup({ stored: { "rec:a": { text: "いい天気", feed: "for-you", ts: Date.now(), g: 1, c: 1, x: 0, m: 1, jv: "group1/c155" }, "rec:b": { feed: "for-you", ts: Date.now(), g: 1, c: 0, x: 0, m: 0, jv: "group1/c155" } } });
+  await wait(300);
+  const rg = t.store["rec:a"];
+  check("版 group1（はい／いいえ）の判定も、本文があれば判定し直し、動員の答えは消す", rg.g === 0 && rg.c === 0 && !("m" in rg) && rg.jv === "ev1/c155" && t.calls.prompts.length === 1 && t.store["rec:b"].jv === "group1/c155", JSON.stringify(rg));
 
   // 答えが壊れて返ったとき
   t = setup({ stored: { "rec:a": rec("x") } });
-  t.ai.create = async () => ({ clone: async () => ({ prompt: async () => JSON.stringify({ lump: "はい", contempt: false, exclusion: false, mobilize: false }), destroy() {} }), destroy() {} });
+  t.ai.create = async () => ({ clone: async () => ({ prompt: async () => JSON.stringify({ group: true, insult: "", exclusion: "" }), destroy() {} }), destroy() {} });
   await wait(300);
-  check("答えが true/false で返らなければ書かない", !("g" in t.store["rec:a"]));
+  check("答えが文字で返らなければ書かない", !("g" in t.store["rec:a"]));
 
   // 1 件だけ失敗する記録があっても、後ろを続ける
   t = setup({ stored: { "rec:a": rec("壊れる投稿", Date.now() - 3000), "rec:b": rec("ふつう", Date.now() - 2000), "rec:c": rec("馬鹿", Date.now() - 1000) } });
@@ -173,6 +182,11 @@ const check = (name, ok, detail) => results.push(`${ok ? "OK" : "NG"}  ${name}${
   const before = t.calls.prompts.length;
   await t.run();
   check("失敗した記録を、見回りのたびに繰り返し試さない", t.calls.prompts.length === before);
+
+  // AI が答えを返さないまま止まったとき
+  t = setup({ stored: { "rec:a": rec("止まる投稿", Date.now() - 2000), "rec:b": rec("馬鹿", Date.now() - 1000) } });
+  await wait(700);
+  check("判定が長く止まったら打ち切って、後ろの記録を続ける", !("g" in t.store["rec:a"]) && t.store["rec:b"].c === 1, JSON.stringify([t.store["rec:a"], t.store["rec:b"]]));
   check("1 件の失敗では AI の元を作り直さない", t.calls.creates === 1);
 
   // 書く直前に「すべて消す」が割り込んでも、本文を戻さない
