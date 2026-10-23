@@ -102,3 +102,20 @@ test("判定の見本: fromTs より前の記録は選ばない（本文がま�
   const recs = { "rec:old": { text: "古い", feed: "for-you", ts: noon - 20 * DAY, g: 1, c: 0, x: 0 }, "rec:new": { text: "新しい", feed: "for-you", ts: noon, g: 1, c: 0, x: 0 } };
   assert.deepEqual(shzSample(recs, { fromTs: noon - 14 * DAY }).map((r) => r.text), ["新しい"]);
 });
+
+test("書き出し: 本文のある記録を古い順に。印・時刻は入れず日付だけ。判定は今の版のものだけ付ける", () => {
+  const { shzExportRows } = require("../stats-core.js");
+  const recs = {
+    "rec:b": { text: "後", feed: "following", ts: noon + 1000, id: "abc", g: 0, c: 0, x: 1, jv: "ev1/c155" },
+    "rec:a": { text: "前", feed: "for-you", ts: noon, id: "def" }, // 未判定
+    "rec:l": { text: "前の版", feed: "for-you", ts: noon + 2000, g: 1, c: 1, x: 1, jv: "group1/c155" }, // 数えない版の答えは付けない
+    "rec:t": { feed: "for-you", ts: noon, g: 1, c: 0, x: 0, jv: "ev1/c155" }, // 本文を消した記録
+  };
+  const rows = shzExportRows(recs);
+  assert.deepEqual(rows.map((r) => r.text), ["前", "後", "前の版"]);
+  assert.deepEqual(rows[0], { feed: "for-you", day: rows[0].day, text: "前" });
+  assert.deepEqual(rows[1], { feed: "following", day: rows[1].day, text: "後", g: 0, c: 0, x: 1, jv: "ev1/c155" });
+  assert.deepEqual(Object.keys(rows[2]).sort(), ["day", "feed", "text"]);
+  assert.ok(rows.every((r) => !("id" in r) && !("ts" in r)));
+  assert.deepEqual(shzExportRows({}), []);
+});

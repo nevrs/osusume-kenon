@@ -68,4 +68,13 @@ function shzSample(records, { n = 10, hitOnly = false, fromTs = 0, rand = Math.r
   return shuffle([...pick, ...rest.slice(0, n - pick.length)]).map(({ text, feed, ts, g, c, x, jv }) => ({ text, feed, ts, g, c, x, jv }));
 }
 
-if (typeof module !== "undefined") module.exports = { SHZ_MIN_N, SHZ_FEEDS, shzTally, shzTallyByDay, shzShare, shzVersions, shzSessionProgress, shzSample };
+// 書き出し（本人がボタンを押したときだけ）。本文の残っている記録を、古い順に。投稿の印（ID から作った文字列）と時刻は入れず、日付だけ。
+// 判定は今の版で判定済みのものだけ付ける（前の版の答えは数えないので、書き出しでも混ぜない）
+function shzExportRows(records) {
+  return Object.values(records)
+    .filter((r) => r.text && typeof r.ts === "number")
+    .sort((a, b) => a.ts - b.ts)
+    .map((r) => ({ feed: r.feed, day: shzDay(r.ts), text: r.text, ...(shzIsJudged(r) ? { g: r.g, c: r.c, x: r.x, jv: r.jv } : {}) }));
+}
+
+if (typeof module !== "undefined") module.exports = { SHZ_MIN_N, SHZ_FEEDS, shzTally, shzTallyByDay, shzShare, shzVersions, shzSessionProgress, shzSample, shzExportRows };

@@ -196,6 +196,27 @@ const check = (name, ok, detail) => results.push(`${ok ? "OK" : "NG"}  ${name}${
   await wait(100);
   check("見本が無いときは、コピーを押せない", t.d.getElementById("sampleCopy").disabled === true);
 
+  // 本文の書き出し: 押したときだけ、本文のある記録をファイルにする。印・時刻は入れない
+  t = setup({ "rec:a": J("for-you", now - 2000, true, { text: "書き出す本文", id: "x1" }), "rec:b": J("following", now - 1000, false), "rec:c": { feed: "for-you", ts: now - 500, text: "未判定の本文" } });
+  let saved = null;
+  t.w.URL.createObjectURL = (blob) => { saved = blob; return "blob:x"; };
+  t.w.URL.revokeObjectURL = () => {};
+  let name = null;
+  t.w.HTMLAnchorElement.prototype.click = function () { name = this.download; };
+  await wait(400);
+  check("書き出しは、押すまでファイルを作らない", saved === null);
+  t.click("recExport");
+  await wait(100);
+  const out = saved ? JSON.parse(await new Promise((r) => { const f = new t.w.FileReader(); f.onload = () => r(f.result); f.readAsText(saved); })) : null;
+  check("書き出し: 本文のある 2 件を古い順に、ファイル名に日付", out?.rows.map((r) => r.text).join("|") === "書き出す本文|未判定の本文" && /^osusume-kenon-\d{4}-\d{2}-\d{2}\.json$/.test(name ?? ""), JSON.stringify({ name, rows: out?.rows }));
+  check("書き出し: 判定済みには答えを付け、印・時刻は入れない", out?.rows[0].g === 1 && !("g" in out.rows[1]) && out.rows.every((r) => !("id" in r) && !("ts" in r)));
+  check("書き出しのあと、渡す先に気をつけるよう知らせる", t.text("saved").includes("2 件") && t.text("saved").includes("気をつけて"));
+  t = setup();
+  await wait(400);
+  t.click("recExport");
+  await wait(100);
+  check("書き出せる本文が無いときは、そう知らせる", t.text("saved").includes("書き出せる本文がありません"));
+
   // 画面の組み立てに innerHTML を使っていない（本文のような外の文字が入る場所は無いが、決まりとして確かめる）
   const src = fs.readFileSync(path.join(repo, "options.js"), "utf8");
   check("options.js は innerHTML を使わない", !/innerHTML|insertAdjacentHTML|document\.write/.test(src));

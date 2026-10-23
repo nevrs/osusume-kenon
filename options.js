@@ -193,6 +193,20 @@ $("recStrip").addEventListener("click", async () => {
   say(shzT("stripped"));
 });
 
+// 本文の書き出し（本人の判断。2026-10-24）: 実際の投稿で判定の精度を測るため。押したときだけ、この端末にファイルを保存する
+$("recExport").addEventListener("click", async () => {
+  const all = await chrome.storage.local.get(null);
+  const rows = shzExportRows(Object.fromEntries(Object.entries(all).filter(([k]) => k.startsWith("rec:"))));
+  if (!rows.length) { say(shzT("recExportNone")); return; }
+  const body = { app: "osusume-kenon", version: chrome.runtime?.getManifest?.().version ?? "?", exported: shzDay(Date.now()), rows };
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(body, null, 1)], { type: "application/json" }));
+  a.download = `osusume-kenon-${body.exported}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+  say(shzT("recExported").replace("{n}", rows.length));
+});
+
 $("sessStart").addEventListener("click", async () => {
   const { recordEnabled } = await chrome.storage.local.get({ recordEnabled: false });
   await chrome.storage.local.set({ session: { start: Date.now(), targetEach: SESSION_TARGET, prev: recordEnabled === true }, recordEnabled: true });

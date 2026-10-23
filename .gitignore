@@ -11,6 +11,7 @@ dist/
 records*.json
 rec-*.json
 export*.json
+osusume-kenon-*.json
 *.records.json
 local-data/
 private/
