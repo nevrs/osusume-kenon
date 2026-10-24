@@ -5,12 +5,12 @@ const { shzTally, shzTallyByDay, shzShare, shzVersions, shzSessionProgress, SHZ_
 
 const DAY = 86_400_000;
 const noon = new Date(2026, 9, 21, 12).getTime(); // この端末の 10/21 正午
-// 今の問いで判定済みの記録。g = ひとまとめ、c = 見下し、x = 排除
+// 今の問いで判定済みの記録。g = 集団の言葉、c = 見下し、x = 排除（ひとまとめの見下しは g と c の両方。D18）
 const j = (feed, ts, g = 0, c = 0, x = 0, jv = "ev1/c155") => ({ feed, ts, g, c, x, jv });
 
-test("feed ごとに、記録・判定済み・ひとまとめ・見下し・排除・どれか を数える。未判定と前の問いの記録は数えない（前の問いは件数だけ）", () => {
+test("feed ごとに、記録・判定済み・ひとまとめの見下し・見下し・排除・どれか を数える。集団の言葉だけでは数えない。未判定と前の問いの記録は数えない（前の問いは件数だけ）", () => {
   const recs = {
-    a: j("for-you", noon, 1, 0, 0), // ひとまとめだけ
+    a: j("for-you", noon, 1, 0, 0), // 集団の言葉だけ（数えない）
     b: j("for-you", noon, 1, 1, 1), // 全部
     c: { feed: "for-you", ts: noon, text: "未判定" },
     d: { feed: "for-you", ts: noon, a: 90, h: 90, jv: "split1/c155" }, // 前の問い
@@ -18,7 +18,7 @@ test("feed ごとに、記録・判定済み・ひとまとめ・見下し・排
     f: j("other", noon, 1, 1, 1), // 知らない feed は数えない
   };
   const t = shzTally(recs);
-  assert.deepEqual(t["for-you"], { seen: 4, judged: 2, lump: 2, contempt: 1, exclusion: 1, any: 2, legacy: 1 });
+  assert.deepEqual(t["for-you"], { seen: 4, judged: 2, lump: 1, contempt: 1, exclusion: 1, any: 1, legacy: 1 });
   assert.deepEqual(t.following, { seen: 1, judged: 1, lump: 0, contempt: 0, exclusion: 0, any: 0, legacy: 0 });
 });
 
@@ -34,7 +34,7 @@ test("期間で絞る（両端を含む）", () => {
 });
 
 test("日ごとに、この端末の日付で分ける", () => {
-  const recs = { a: j("for-you", noon, 1), b: j("following", noon), c: j("for-you", noon - DAY), d: { feed: "for-you", ts: "壊れた" } };
+  const recs = { a: j("for-you", noon, 1, 1), b: j("following", noon), c: j("for-you", noon - DAY), d: { feed: "for-you", ts: "壊れた" } };
   const d = shzTallyByDay(recs);
   assert.deepEqual(Object.keys(d).sort(), ["2026-10-20", "2026-10-21"]);
   assert.equal(d["2026-10-21"]["for-you"].any, 1);
@@ -87,12 +87,13 @@ test("判定の見本: 本文のある判定済みだけから、おすすめ・
 test("判定の見本: 片方が足りなければ他方で埋める。hitOnly は、どれかに当てはまったものだけ", () => {
   const { shzSample } = require("../stats-core.js");
   const recs = {
-    "rec:1": { text: "a", feed: "for-you", ts: noon, g: 1, c: 0, x: 0 },
+    "rec:1": { text: "a", feed: "for-you", ts: noon, g: 1, c: 1, x: 0 },
+    "rec:5": { text: "e", feed: "for-you", ts: noon, g: 1, c: 0, x: 0 }, // 集団の言葉だけは数えない（D18）
     "rec:2": { text: "b", feed: "for-you", ts: noon, g: 0, c: 0, x: 1 },
     "rec:3": { text: "c", feed: "for-you", ts: noon, g: 0, c: 0, x: 0 },
     "rec:4": { text: "d", feed: "following", ts: noon, g: 0, c: 0, x: 0, m: 1 }, // 動員だけは数えない
   };
-  assert.equal(shzSample(recs, { n: 10 }).length, 4);
+  assert.equal(shzSample(recs, { n: 10 }).length, 5);
   assert.deepEqual(shzSample(recs, { n: 10, hitOnly: true }).map((r) => r.text).sort(), ["a", "b"]);
   assert.deepEqual(shzSample({}, { n: 10 }), []);
 });

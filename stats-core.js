@@ -1,8 +1,8 @@
 // 判定済みの記録を数える（画面に触れない。設定画面とテストが使う）。
-// 数えるのは今の問い（D15）の答え: ひとまとめ（g）・見下し（c）・排除（x）。どれかに当てはまれば any。前の問い（怒り・敵意の点、版 group1 の答え。D16）の記録は legacy として件数だけ数える
+// 数えるのは今の問い（D15）の答え: ひとまとめの見下し（集団の言葉 g と見下し c の両方。D18）・見下し（c）・排除（x）。どれかに当てはまれば any。前の問い（怒り・敵意の点、版 group1 の答え。D16）の記録は legacy として件数だけ数える
 
 // ブラウザでは record-core.js が先に読まれていて、shzIsJudged・shzDay が使える。テスト（node）ではここで読み込む
-if (typeof module !== "undefined") { const c = require("./record-core.js"); globalThis.shzIsJudged = c.shzIsJudged; globalThis.shzIsLegacy = c.shzIsLegacy; globalThis.shzDay = c.shzDay; }
+if (typeof module !== "undefined") { const c = require("./record-core.js"); globalThis.shzIsJudged = c.shzIsJudged; globalThis.shzIsLegacy = c.shzIsLegacy; globalThis.shzDay = c.shzDay; globalThis.shzLumpHit = c.shzLumpHit; globalThis.shzAnyHit = c.shzAnyHit; }
 
 const SHZ_MIN_N = 30; // これより少ない判定済み件数の割合は、参考にしない
 
@@ -21,10 +21,10 @@ function shzTally(records, fromTs = 0, toTs = Infinity) {
     t.seen++;
     if (!shzIsJudged(r)) { if (shzIsLegacy(r)) t.legacy++; continue; }
     t.judged++;
-    if (r.g) t.lump++;
+    if (shzLumpHit(r)) t.lump++;
     if (r.c) t.contempt++;
     if (r.x) t.exclusion++;
-    if (r.g || r.c || r.x) t.any++;
+    if (shzAnyHit(r)) t.any++;
   }
   return out;
 }
@@ -60,7 +60,7 @@ function shzSessionProgress(records, session, nowMs = Date.now()) {
 // 当てはまったものを先に並べない（「ひとまとめの投稿の一覧」にしない。DESIGN.md D14）。hitOnly なら、どれかに当てはまったものだけから選ぶ
 function shzSample(records, { n = 10, hitOnly = false, fromTs = 0, rand = Math.random } = {}) {
   const shuffle = (xs) => { for (let i = xs.length - 1; i > 0; i--) { const k = Math.floor(rand() * (i + 1)); [xs[i], xs[k]] = [xs[k], xs[i]]; } return xs; };
-  const pool = Object.values(records).filter((r) => r.text && r.ts >= fromTs && shzIsJudged(r) && (!hitOnly || r.g || r.c || r.x));
+  const pool = Object.values(records).filter((r) => r.text && r.ts >= fromTs && shzIsJudged(r) && (!hitOnly || shzAnyHit(r)));
   const by = Object.fromEntries(SHZ_FEEDS.map((f) => [f, shuffle(pool.filter((r) => r.feed === f))]));
   const half = Math.ceil(n / 2);
   const pick = [...by["for-you"].slice(0, half), ...by.following.slice(0, n - half)];

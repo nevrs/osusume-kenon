@@ -70,7 +70,7 @@ function shareCell(tr, count, judged, barClass) {
   }
 }
 
-// おすすめとフォロー中の差（ひとまとめ・見下し・排除のどれかに当てはまる割合）の文。比べられないときは理由
+// おすすめとフォロー中の差（見下し・排除のどれかに当てはまる割合。ひとまとめの見下しは見下しに含まれる。D18）の文。比べられないときは理由
 function diffText(t) {
   const a = shzShare(t["for-you"].any, t["for-you"].judged), b = shzShare(t.following.any, t.following.judged);
   if (a === null || b === null) return shzT("diffNeed", { min: SHZ_MIN_N, a: t["for-you"].judged, b: t.following.judged });
@@ -224,7 +224,8 @@ $("sessEnd").addEventListener("click", async () => {
 let sampleHit = false;
 let samplePicks = null; // いま出している見本（言語を変えたときは、選び直さずに描き直す）
 const sampleHead = (r) => `${feedLabel(r.feed)} · ${new Date(r.ts).toLocaleDateString()}`;
-const sampleHits = (r) => [["g", "thLump"], ["c", "thContempt"], ["x", "thExclusion"]].filter(([k]) => r[k]).map(([, key]) => shzT(key));
+// ひとまとめの見下しは見下しを含むので、両方そろったら「ひとまとめの見下し」だけを出す（D18）
+const sampleHits = (r) => [[shzLumpHit(r), "thLump"], [r.c && !shzLumpHit(r), "thContempt"], [r.x, "thExclusion"]].filter(([on]) => on).map(([, key]) => shzT(key));
 async function drawSample(repick = true) {
   const box = $("sampleBox");
   $("sampleHit").textContent = shzT(sampleHit ? "sampleRandom" : "sampleHitOnly");

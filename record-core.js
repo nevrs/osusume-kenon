@@ -59,6 +59,11 @@ function shzIsJudged(r) {
 }
 
 // 前の問いで判定した記録（怒り a・敵意 h の 0〜100。D10。または版 group1。D16）。数えないが、本文の無い記録は期限まで残す（D15）
+// 数え方（D18）: 「ひとまとめの見下し」は、集団の言葉（g）と見下しの言葉（c）が両方あるときだけ。集団の言葉だけでは数えない
+// （集団の名前が出てくるだけの投稿まで当てはまった）。ひとまとめの見下しは見下しに含まれるので、どれかに当てはまる = 見下しか排除
+const shzLumpHit = (r) => !!(r.g && r.c);
+const shzAnyHit = (r) => !!(r.c || r.x);
+
 function shzIsLegacy(r) {
   return !shzIsJudged(r) && ((typeof r.h === "number" && typeof r.a === "number") || shzIsGcx(r));
 }
@@ -107,4 +112,4 @@ function shzSummarize(records) {
   return out;
 }
 
-if (typeof module !== "undefined") module.exports = { SHZ_KEEP_DAYS, SHZ_KEEP_COUNT_DAYS, shzIsJudged, shzIsLegacy, shzDay, shzPurgePlan, shzPostId, shzPostText, shzIsAd, shzFeedOf, shzHashId, shzSummarize, SHZ_AD_LABELS };
+if (typeof module !== "undefined") module.exports = { SHZ_KEEP_DAYS, SHZ_KEEP_COUNT_DAYS, shzIsJudged, shzIsLegacy, shzLumpHit, shzAnyHit, shzDay, shzPurgePlan, shzPostId, shzPostText, shzIsAd, shzFeedOf, shzHashId, shzSummarize, SHZ_AD_LABELS };

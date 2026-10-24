@@ -68,6 +68,14 @@
     schema: evSchema(["group", "trait", "insult", "exclusion"]),
     pick: (o, text) => ({ lump: near(o.group, text) && near(o.trait, text), contempt: near(o.insult, text), exclusion: near(o.exclusion, text), mobilize: false, ev: [o.group, o.trait, o.insult, o.exclusion] }),
   };
+  // gc1: ひとまとめを「集団の言葉」だけで数えると、集団の言葉が出てくるだけの投稿まで当てはまった（0.12.0 の実際の見本）。
+  // 本人の案で、集団をまとめて見下している部分を 1 つとして抜き出させる（ev1 は集団と見下しを別の欄に分けず、両方そろうことがまれだった）
+  const GC = "lumpinsult（ひとまとめの見下し）: 実在の人々の集団（国籍・民族・性別・世代・職業・地域・宗教・政治的立場など）を、まとめて見下す・侮辱する・人間扱いしない部分。集団を指す言葉と、見下す言葉の両方を含む一続きの部分を、40 文字以内でそのまま抜き出す。特定の個人・会社・役所・作品・機械・物語やゲームの登場人物や種族に向けたものなら空。集団の名前が出てくるだけで見下していないなら空。";
+  VARIANTS.gc1 = {
+    system: [EV_HEAD, GC, EV.insult, EV.exclusion].join("\n"),
+    schema: evSchema(["lumpinsult", "insult", "exclusion"]),
+    pick: (o, text) => ({ lump: found(o.lumpinsult, text), contempt: found(o.insult, text), exclusion: found(o.exclusion, text), mobilize: false, ev: [o.lumpinsult, o.insult, o.exclusion] }),
+  };
   window.__R = [];
   window.__done = false;
   (async () => {
