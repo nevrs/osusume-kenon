@@ -120,3 +120,9 @@ test("書き出し: 本文のある記録を古い順に。印・時刻は入れ
   assert.ok(rows.every((r) => !("id" in r) && !("ts" in r)));
   assert.deepEqual(shzExportRows({}), []);
 });
+
+test("書き出し: 開発用の自動スクロールで集めた記録には auto: 1 を付ける（D21）", () => {
+  const { shzExportRows } = require("../stats-core.js");
+  const rows = shzExportRows({ "rec:a": { text: "手", feed: "for-you", ts: noon }, "rec:b": { text: "自動", feed: "for-you", ts: noon + 1, auto: 1 } });
+  assert.deepEqual(rows.map((r) => r.auto), [undefined, 1]);
+});

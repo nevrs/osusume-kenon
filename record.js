@@ -20,6 +20,11 @@ let shzFlushTimer = 0;
 let shzObserver = null;
 let shzMutation = null;
 
+// 開発用の自動スクロール（tools/dev-autoscroll.js。D21）が動いている間は、記録に auto: 1 の印を付ける。台本が書く時刻が 15 秒より古ければ動いていないとみなす。普段は何もしない
+function shzDevAuto() {
+  try { const t = Number(sessionStorage.getItem("shizume:dev-auto")); return t > 0 && Date.now() - t < 15_000; } catch { return false; }
+}
+
 async function shzCapture(article) {
   if (!shzRecOn || !article.isConnected) return;
   const gen = shzGen, epoch = shzEpoch;
@@ -32,7 +37,7 @@ async function shzCapture(article) {
   if (gen !== shzGen || epoch !== shzEpoch) return; // 待っている間にオフ・全削除された
   if (shzSeen.has(key)) return;
   shzSeen.add(key);
-  shzQueue[`rec:${key}`] = { text, feed, ts: Date.now() };
+  shzQueue[`rec:${key}`] = { text, feed, ts: Date.now(), ...(shzDevAuto() ? { auto: 1 } : {}) };
   if (!shzFlushTimer) shzFlushTimer = setTimeout(shzFlush, SHZ_FLUSH_MS); // 新しく記録するたびに待ち直さない（スクロール中に保存されなくなるため）
 }
 

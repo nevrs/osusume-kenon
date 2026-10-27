@@ -74,7 +74,7 @@ function shzExportRows(records) {
   return Object.values(records)
     .filter((r) => r.text && typeof r.ts === "number")
     .sort((a, b) => a.ts - b.ts)
-    .map((r) => ({ feed: r.feed, day: shzDay(r.ts), text: r.text, ...(shzIsJudged(r) ? { g: r.g, c: r.c, x: r.x, jv: r.jv } : {}) }));
+    .map((r) => ({ feed: r.feed, day: shzDay(r.ts), text: r.text, ...(r.auto ? { auto: 1 } : {}), ...(shzIsJudged(r) ? { g: r.g, c: r.c, x: r.x, jv: r.jv } : {}) }));
 }
 
 if (typeof module !== "undefined") module.exports = { SHZ_MIN_N, SHZ_FEEDS, shzTally, shzTallyByDay, shzShare, shzVersions, shzSessionProgress, shzSample, shzExportRows };

@@ -136,7 +136,7 @@ async function shzFjRun() {
       await chrome.storage.local.set({ [k]: { ...rest, ...ans }, ...(fast ? {} : { judgeDay: { d: today, n: used + 1 } }) });
       const after = await chrome.storage.local.get({ recordClearedAt: 0, textClearedAt: 0 });
       if (after.recordClearedAt !== st.recordClearedAt) await chrome.storage.local.remove(k); // 「すべて消す」が割り込んだ
-      else if (after.textClearedAt !== st.textClearedAt && latest.ts < after.textClearedAt) await chrome.storage.local.set({ [k]: { feed: latest.feed, ts: latest.ts, ...ans } }); // 「本文だけ消す」が割り込んだ
+      else if (after.textClearedAt !== st.textClearedAt && latest.ts < after.textClearedAt) await chrome.storage.local.set({ [k]: { feed: latest.feed, ts: latest.ts, ...(latest.auto ? { auto: 1 } : {}), ...ans } }); // 「本文だけ消す」が割り込んだ
       await shzFjSleep(fast ? SHZ_FJ.sessionGapMs : SHZ_FJ.gapMs);
     }
   } finally {

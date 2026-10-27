@@ -4,7 +4,7 @@
 
 const SHZ_I18N = {
   ja: {
-    title: "おすすめ検温の設定",
+    title: "Timeline Checker for X の設定",
     langLabel: "言語 / Language",
     langAuto: "自動 / Auto",
     sampleSummary: "**判定の見本**（AI が何を「ひとまとめの見下し」「見下し」「排除」と読んだか）",
@@ -79,7 +79,7 @@ const SHZ_I18N = {
     help5: "AI は誤ります。ひとまとめにすることを批判している文や、正当な批判を当てはまると読むこともあります。「ひとまとめの見下し」は、言いすぎを減らす代わりに、見落としが多くなっています。数字は目安で、2 つの画面の違いを示すだけです。",
   },
   en: {
-    title: "Osusume Kenon settings",
+    title: "Timeline Checker for X settings",
     langLabel: "言語 / Language",
     langAuto: "自動 / Auto",
     sampleSummary: "**Judging samples** (what the AI read as \"group contempt\", \"contempt\" and \"exclusion\")",

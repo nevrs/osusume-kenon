@@ -1,5 +1,6 @@
 // 人をひとまとめに括る言葉の判定（DESIGN.md D15）を、Chrome の組み込み AI（Prompt API）で試す。ページの開発者ツールのコンソールで動かす（X では動かさない）。
 // 使い方: window.__ITEMS = [{id, text}]、window.__RUNS = 回数、window.__VARIANTS = ["group1", "ev1"] を入れてから、このファイルの中身を貼る。
+// window.__RUN0 で始める回を、window.__TIMEOUT で 1 件の打ち切り（既定 30 秒。AI が長い答えを書き続けて止まることがある）を変えられる。
 // 結果は window.__R（{v, run, id, ...答え, ms}）に入り、終わると window.__done が true になる。集計は tools/group_stats.js
 {
   const LANG = { expectedInputs: [{ type: "text", languages: ["ja", "en"] }], expectedOutputs: [{ type: "text", languages: ["ja"] }] };
@@ -76,6 +77,18 @@
     schema: evSchema(["lumpinsult", "insult", "exclusion"]),
     pick: (o, text) => ({ lump: found(o.lumpinsult, text), contempt: found(o.insult, text), exclusion: found(o.exclusion, text), mobilize: false, ev: [o.lumpinsult, o.insult, o.exclusion] }),
   };
+  // tg1: ev1 は「作品・機械・AI・登場人物は含めない」と書いても、AI・ゲーム・作中の人物・自分を下げる文に印を付けた（0.13.1 の実際の見本）。
+  // 定義の中の除外は守られないので、向けた相手を選択肢から先に選ばせ、人（person・people）でなければコードで印を捨てる。ひとまとめは people のときだけ
+  const TG = "target（向けた相手）: 投稿の中の悪口・決めつけ・追い出す言葉が向いている相手を 1 つ選ぶ。self=書き手自身、person=実在の個人、people=実在の人々の集団、thing=物・機械・AI・アプリ・サービス・会社の製品・作品・ゲーム・物語やゲームの登場人物や種族、none=向ける相手がいない（天気・出来事・自分の失敗談など）か、悪口・決めつけ・追い出す言葉が無い。";
+  const TARGET = { type: "string", enum: ["self", "person", "people", "thing", "none"] };
+  VARIANTS.tg1 = {
+    system: [EV_HEAD, TG, EV.group, EV.insult, EV.exclusion].join("\n"),
+    schema: { type: "object", properties: { target: TARGET, ...evSchema(["group", "insult", "exclusion"]).properties }, required: ["target", "group", "insult", "exclusion"] },
+    pick: (o, text) => {
+      const human = o.target === "person" || o.target === "people";
+      return { lump: o.target === "people" && found(o.group, text), contempt: human && found(o.insult, text), exclusion: human && found(o.exclusion, text), mobilize: false, target: o.target, ev: [o.group, o.insult, o.exclusion] };
+    },
+  };
   window.__R = [];
   window.__done = false;
   (async () => {
@@ -84,14 +97,14 @@
       const parts = (v) => VARIANTS[v].parts || [VARIANTS[v]];
       const bases = {};
       for (const v of names) bases[v] = await Promise.all(parts(v).map((p) => LanguageModel.create({ ...LANG, initialPrompts: [{ role: "system", content: p.system }] })));
-      for (let run = 1; run <= (window.__RUNS || 1); run++) for (const it of window.__ITEMS) for (const v of names) {
+      for (let run = window.__RUN0 || 1; run <= (window.__RUNS || 1); run++) for (const it of window.__ITEMS) for (const v of names) {
         const t0 = performance.now();
         let p = {};
         try {
           const o = {};
           for (const [i, part] of parts(v).entries()) {
             const s = await bases[v][i].clone(); // 文ごとに前の文の影響を残さない
-            try { Object.assign(o, JSON.parse(await s.prompt(`投稿:\n${it.text}`, { responseConstraint: part.schema }))); } finally { s.destroy(); }
+            try { Object.assign(o, JSON.parse(await s.prompt(`投稿:\n${it.text}`, { responseConstraint: part.schema, signal: AbortSignal.timeout(window.__TIMEOUT || 30_000) }))); } finally { s.destroy(); }
           }
           p = VARIANTS[v].pick(o, it.text);
         } catch (e) { p = { error: String(e).slice(0, 120) }; }
