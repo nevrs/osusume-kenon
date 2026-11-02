@@ -1,4 +1,4 @@
-// 形の手がかり（DESIGN.md D6-1）の分布を出す。node tools/ratio_stats.js <データのファイル>（実機で集めた数は公開していないので、既定のファイルは無い。集計の結果は research/form-signals.md）
+// 形の手がかり（DESIGN.md D6-1）の分布を出す。node tools/ratio_stats.js <データのファイル>（実機で集めた数は公開していないので、既定のファイルは無い。集計の結果も公開していない）
 const { resolve } = require("node:path");
 const path = resolve(process.argv[2] || (console.error("使い方: node tools/ratio_stats.js <データのファイル>"), process.exit(1)));
 const { rows } = require(path);
