@@ -52,7 +52,8 @@ function setup({ url = "https://x.com/home", tab = "おすすめ", stored = {}, 
     },
     onChanged: { addListener: (f) => listeners.push(f) },
   } };
-  w.eval(["x-dom.js", "record-core.js", "log.js", "record.js"].map((f) => fs.readFileSync(path.join(repo, f), "utf8")).join(";\n"));
+  w.document.documentElement.lang = "ja"; // X の日本語の画面
+  w.eval(["x-dom.js", "x-counts.js", "record-core.js", "log.js", "record.js"].map((f) => fs.readFileSync(path.join(repo, f), "utf8")).join(";\n"));
   const d = w.document;
   const art = (id) => [...d.querySelectorAll("article")].find((a) => a.querySelector(`a[href$="/status/${id}"]`));
   const see = (id, ratio = 0.8) => { for (const io of ios) if (io.observed.has(art(id))) io.cb([{ target: art(id), isIntersecting: ratio > 0, intersectionRatio: ratio }]); };
@@ -91,7 +92,9 @@ const check = (name, ok) => results.push(`${ok ? "OK" : "NG"}  ${name}`);
   const r = t.recs();
   const get = (id) => r[`rec:${hashOf(id)}`];
   check("見えていた投稿の本文・おすすめ・時刻を残す", get("111")?.text === "怒っている投稿です" && get("111")?.feed === "for-you" && typeof get("111")?.ts === "number");
-  check("残す項目は本文・feed・時刻だけ（投稿者名・リンク・元の ID を残さない）", JSON.stringify(Object.keys(get("111")).sort()) === '["feed","text","ts"]' && !JSON.stringify(r).includes("someone") && !JSON.stringify(r).includes("status") && !Object.keys(r).some((k) => k.includes("111")));
+  check("残す項目は本文・feed・時刻・反応の数・投稿からの分だけ（投稿者名・リンク・元の ID を残さない）", JSON.stringify(Object.keys(get("111")).sort()) === '["age","ct","feed","text","ts"]' && !JSON.stringify(r).includes("someone") && !JSON.stringify(r).includes("status") && !Object.keys(r).some((k) => k.includes("111")));
+  check("反応の数を残す（日本語の画面では、文に無い種類は 0）（D25）", JSON.stringify(get("111")?.ct) === '{"r":1,"p":0,"l":2,"b":0,"v":0}');
+  check("投稿からの分は、引用の外の日時から数える（D25）", Math.abs(get("222")?.age - (Date.now() - Date.parse("2026-10-21T00:00:00Z")) / 60_000) < 2);
   check("引用の投稿は、自分の本文だけを残す（引用元の本文は残さない）", get("222")?.text === "自分の本文" && !JSON.stringify(r).includes("引用元の本文"));
   check("広告は残さない", !get("333"));
   check("本文の無い投稿（画像だけ）は残さない", !get("444"));

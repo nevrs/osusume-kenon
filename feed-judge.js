@@ -4,6 +4,7 @@
 // 問いは tools/group-probe.js の ev1 と同じ（research/group-record.md で測ったもの）。変えるときは両方を直して測り直し、SHZ_FJ.version を上げる。
 // 前の問い（怒り a・敵意 h。版 group1 の g・c・x・m）で判定した記録は、本文が残っていれば、この問いで判定し直す（前の答えは消す）。
 // 普段（パッシブ）は、画面を開いているあいだ、間を空けて 1 件ずつ・1 日の上限つき。測定モード（アクティブ）の間は上限なしで、間を短くする。
+// 話題（tp）も、別の問いで 1 つ選ばせて書き足す（D23。おすすめとフォロー中の話題の重なりを見るため）。見下し・排除の問いとは混ぜない（そちらの答え方を変えないため）。
 
 const SHZ_FJ = {
   version: "ev1", // 問いの版。答え方が変わったら上げる（記録に残す）
@@ -26,19 +27,42 @@ const SHZ_FJ_SCHEMA = { type: "object", properties: Object.fromEntries(SHZ_FJ_QS
 // 抜き出した言葉が本文にあるか（空白・かぎかっこ・引用符と、全角半角の違いは見ない）。AI は問いの中の例を書き写すことがあり、それをはじく
 const shzFjNorm = (s) => String(s).normalize("NFKC").replace(/[\s「」『』"'“”]/g, "");
 const shzFjFound = (w, text) => typeof w === "string" && shzFjNorm(w).length > 0 && shzFjNorm(text).includes(shzFjNorm(w));
+// 話題の問い（D23）。tools/group-probe.js の tp2 と同じ文。一覧と問いを変えたら両方を直して測り直し、SHZ_FJ_TOPIC.version を上げる（記録に tv として残し、版の違う記録は判定し直す）
+const SHZ_FJ_TOPIC = {
+  version: "tp2", // tp1 から、話題の説明を具体的にした（research/topic-record.md）
+  keys: ["politics", "society", "world", "economy", "tech", "games", "anime", "celeb", "sports", "hobby", "life", "other"],
+  system: [
+    "あなたは SNS の投稿を読み、その投稿の主な話題を次の一覧から 1 つだけ選ぶ。いくつか当てはまるときは、いちばん中心のものを選ぶ。life は、ほかのどれにも当てはまらない身の回りの話のときだけ選ぶ。",
+    "politics: 国内の政治・選挙・政党・政策・国会・議会・行政・議員",
+    "society: 国内の社会のできごと・事件・事故・火事・災害・交通の乱れ・裁判・差別や人権の問題",
+    "world: 外国のできごと・外国の政治や選挙・国際関係・関税・戦争・外国の天気や災害",
+    "economy: 経済・物価・値上げ・円安・お金・投資・仕事・転職・給料・会社",
+    "tech: 科学・技術・宇宙・研究・IT・AI・スマホ・ネットのサービス",
+    "games: ゲーム（スマホのゲーム・ガチャ・対戦・RPG を含む）",
+    "anime: アニメ・漫画・小説・映画・ドラマ（作品の感想を含む）",
+    "celeb: 芸能人・俳優・歌手・バンド・アイドル・新曲・ライブ・配信者",
+    "sports: スポーツ（観戦も、自分で走る・運動するのも含む）",
+    "hobby: 趣味・手芸・創作・旅行・温泉・お出かけ・ファッション・買い物",
+    "life: 暮らし・日常・食べ物・家族・ペット・健康・気持ち",
+    "other: 意味のある話題が無い（あいさつ・記号・テスト）",
+  ].join("\n"),
+};
+SHZ_FJ_TOPIC.schema = { type: "object", properties: { topic: { type: "string", enum: SHZ_FJ_TOPIC.keys } }, required: ["topic"] };
 const SHZ_FJ_LANG = { expectedInputs: [{ type: "text", languages: ["ja", "en"] }], expectedOutputs: [{ type: "text", languages: ["ja"] }] };
 
 const shzFjTab = Math.random().toString(36).slice(2); // このタブの印（判定を同時に回さないため）
-let shzFjBase = null; // 問いを読ませた元のやりとり（の約束）。文ごとに複製して使う
+// 問いを読ませた元のやりとり（の約束）。文ごとに複製して使う。問いごとに 1 つ
+const shzFjBases = { judge: { system: SHZ_FJ_SYSTEM, p: null }, topic: { system: SHZ_FJ_TOPIC.system, p: null } };
 let shzFjRunning = false;
 const shzFjSkip = new Set(); // 判定に失敗した記録。このタブでは繰り返し試さない（後ろの記録を止めないため）
+const shzFjTopicSkip = new Set(); // 話題の判定に失敗した記録（同じ）
 
-async function shzFjMakeBase() {
+async function shzFjMakeBase(system) {
   const av = await LanguageModel.availability(SHZ_FJ_LANG);
   shzLog("judge", "availability", av);
   if (av !== "available") return null; // ダウンロードを始めない
   const t0 = Date.now();
-  const base = await LanguageModel.create({ ...SHZ_FJ_LANG, initialPrompts: [{ role: "system", content: SHZ_FJ_SYSTEM }] });
+  const base = await LanguageModel.create({ ...SHZ_FJ_LANG, initialPrompts: [{ role: "system", content: system }] });
   shzLog("judge", "base-created", { ms: Date.now() - t0 });
   return base;
 }
@@ -46,20 +70,20 @@ async function shzFjMakeBase() {
 // 失敗の理由（エラーの種類と文。本文は入れない。診断に出す）
 const shzFjErr = (e) => `${e?.name || "Error"}: ${e?.message || e}`.slice(0, 160);
 
-// 1 件を判定して {g, c, x}（0/1）を返す。組み込み AI が使えなければ null、その 1 件だけが失敗したら {failed: true, err}
-async function shzFeedJudge(text) {
+// 1 件を問い（shzFjBases の 1 つ）に読ませ、JSON の答えを返す。組み込み AI が使えなければ null、その 1 件だけが失敗したら {failed: true, err}
+async function shzFjAsk(ref, text, schema) {
   if (typeof LanguageModel === "undefined") { shzLog("judge", "no-LanguageModel"); return null; }
-  const pending = (shzFjBase ??= shzFjMakeBase());
+  const pending = (ref.p ??= shzFjMakeBase(ref.system));
   let base = null;
   try {
     base = await pending;
   } catch (e) {
     shzLog("judge", "base-error", shzFjErr(e));
-    if (shzFjBase === pending) shzFjBase = null; // 作れなかった。次に作り直す
+    if (ref.p === pending) ref.p = null; // 作れなかった。次に作り直す
     return null;
   }
   if (!base) {
-    if (shzFjBase === pending) shzFjBase = null; // まだ使えない。次に確かめ直す
+    if (ref.p === pending) ref.p = null; // まだ使えない。次に確かめ直す
     return null;
   }
   let s = null;
@@ -67,17 +91,14 @@ async function shzFeedJudge(text) {
     s = await base.clone();
   } catch (e) {
     shzLog("judge", "clone-error", shzFjErr(e));
-    if (shzFjBase === pending) { shzFjBase = null; base.destroy(); } // 元が壊れている。次に作り直す
+    if (ref.p === pending) { ref.p = null; base.destroy(); } // 元が壊れている。次に作り直す
     return null;
   }
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), SHZ_FJ.timeoutMs);
   try {
-    const out = await s.prompt(`投稿:\n${text}`, { responseConstraint: SHZ_FJ_SCHEMA, signal: ac.signal });
-    let o;
-    try { o = JSON.parse(out); } catch { shzLog("judge", "bad-json", { outLen: String(out).length }); return { failed: true, err: "bad-json" }; } // パースのエラー文には AI の出力が入るので、残さない
-    if (!SHZ_FJ_QS.every((q) => typeof o?.[q] === "string")) return { failed: true, err: "not-a-string" };
-    return { g: +shzFjFound(o.group, text), c: +shzFjFound(o.insult, text), x: +shzFjFound(o.exclusion, text) }; // 抜き出した言葉は本文の一部なので、記録にもログにも残さない
+    const out = await s.prompt(`投稿:\n${text}`, { responseConstraint: schema, signal: ac.signal });
+    try { return { o: JSON.parse(out) }; } catch { shzLog("judge", "bad-json", { outLen: String(out).length }); return { failed: true, err: "bad-json" }; } // パースのエラー文には AI の出力が入るので、残さない
   } catch (e) {
     shzLog("judge", "prompt-error", { err: shzFjErr(e), len: text.length });
     return { failed: true, err: shzFjErr(e) }; // この 1 件だけの失敗（長すぎる本文・打ち切りなど）。元は壊さない
@@ -86,6 +107,23 @@ async function shzFeedJudge(text) {
     s?.destroy();
   }
 }
+
+// 1 件を判定して {g, c, x}（0/1）を返す。返し方は shzFjAsk と同じ
+async function shzFeedJudge(text) {
+  const r = await shzFjAsk(shzFjBases.judge, text, SHZ_FJ_SCHEMA);
+  if (!r || r.failed) return r;
+  const o = r.o;
+  if (!SHZ_FJ_QS.every((q) => typeof o?.[q] === "string")) return { failed: true, err: "not-a-string" };
+  return { g: +shzFjFound(o.group, text), c: +shzFjFound(o.insult, text), x: +shzFjFound(o.exclusion, text) }; // 抜き出した言葉は本文の一部なので、記録にもログにも残さない
+}
+
+// 1 件の話題を {tp} で返す（一覧のキー）。返し方は shzFjAsk と同じ
+async function shzFeedTopic(text) {
+  const r = await shzFjAsk(shzFjBases.topic, text, SHZ_FJ_TOPIC.schema);
+  if (!r || r.failed) return r;
+  return SHZ_FJ_TOPIC.keys.includes(r.o?.topic) ? { tp: r.o.topic } : { failed: true, err: "not-a-topic" };
+}
+const shzFjNeedTopic = (r) => r.tv !== SHZ_FJ_TOPIC.version;
 
 const shzFjVersion = () => `${SHZ_FJ.version}/c${(/Chrome\/(\d+)/.exec(navigator.userAgent) || [])[1] || "?"}`;
 const shzFjSleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -108,8 +146,8 @@ async function shzFjRun() {
     const all = await chrome.storage.local.get(null);
     const start = all.session && !all.session.end ? all.session.start : Infinity;
     const todo = Object.entries(all)
-      .filter(([k, r]) => k.startsWith("rec:") && r.text && !shzIsJudged(r) && !shzFjSkip.has(k))
-      .sort(([, x], [, y]) => (y.ts >= start) - (x.ts >= start) || x.ts - y.ts) // 測定モードの分を先に、あとは古い順（先に期限が来る）
+      .filter(([k, r]) => k.startsWith("rec:") && r.text && ((!shzIsJudged(r) && !shzFjSkip.has(k)) || (shzFjNeedTopic(r) && !shzFjTopicSkip.has(k))))
+      .sort(([, x], [, y]) => (y.ts >= start) - (x.ts >= start) || shzIsJudged(x) - shzIsJudged(y) || x.ts - y.ts) // 測定モードの分を先に、次に見下し・排除が未判定のもの（話題だけの判定し直しで、1 日の上限を先に使い切らない）、あとは古い順（先に期限が来る）
       .map(([k]) => k);
     if (todo.length) shzLog("judge", "record-run", { todo: todo.length });
     for (const k of todo) {
@@ -122,21 +160,35 @@ async function shzFjRun() {
       if (lock && lock.id !== shzFjTab && Date.now() - lock.ts < SHZ_FJ.lockMs) { shzLog("judge", "locked-by-other-tab"); return; } // 別のタブが判定している
       await chrome.storage.local.set({ judgeLock: { id: shzFjTab, ts: Date.now() } });
       const cur = (await chrome.storage.local.get(k))[k];
-      if (!cur || !cur.text || shzIsJudged(cur)) continue;
-      const t0 = Date.now();
-      const res = await shzFeedJudge(cur.text);
-      shzLog("judge", "record-judged", res ? (res.failed ? { failed: res.err } : { ms: Date.now() - t0, g: res.g, c: res.c, x: res.x }) : "ai-unavailable");
-      if (!res) return; // 組み込み AI が使えない。次の見回りで確かめ直す
-      if (res.failed) { shzFjSkip.add(k); await shzFjSleep(fast ? SHZ_FJ.sessionGapMs : SHZ_FJ.gapMs); continue; } // この 1 件だけの失敗。後ろの記録は続ける（間は空ける）
+      if (!cur || !cur.text) continue;
+      const needJudge = !shzIsJudged(cur) && !shzFjSkip.has(k), needTopic = shzFjNeedTopic(cur) && !shzFjTopicSkip.has(k);
+      if (!needJudge && !needTopic) continue;
+      const ans = {};
+      if (needJudge) {
+        const t0 = Date.now();
+        const res = await shzFeedJudge(cur.text);
+        shzLog("judge", "record-judged", res ? (res.failed ? { failed: res.err } : { ms: Date.now() - t0, g: res.g, c: res.c, x: res.x }) : "ai-unavailable");
+        if (!res) return; // 組み込み AI が使えない。次の見回りで確かめ直す
+        if (res.failed) shzFjSkip.add(k); // この 1 件だけの失敗。後ろの記録は続ける（間は空ける）
+        else Object.assign(ans, { g: res.g, c: res.c, x: res.x, jv: shzFjVersion() });
+      }
+      if (needTopic && !(needJudge && !ans.jv)) { // 見下し・排除の判定に失敗した記録は、話題も今回は見ない
+        const t0 = Date.now();
+        const res = await shzFeedTopic(cur.text);
+        shzLog("judge", "topic-judged", res ? (res.failed ? { failed: res.err } : { ms: Date.now() - t0, tp: res.tp }) : "ai-unavailable");
+        if (!res) return;
+        if (res.failed) shzFjTopicSkip.add(k);
+        else Object.assign(ans, { tp: res.tp, tv: SHZ_FJ_TOPIC.version });
+      }
+      if (!Object.keys(ans).length) { await shzFjSleep(fast ? SHZ_FJ.sessionGapMs : SHZ_FJ.gapMs); continue; }
       const latest = (await chrome.storage.local.get(k))[k];
       if (!latest) continue; // 判定している間に消された
       // 読んでから書くまでの間に、消す操作が割り込んでも本文を戻さない: 書いたあとで、消す操作の目印が変わっていないか見て、変わっていれば消し直す
       const { a, h, m, ...rest } = latest; // 前の問いの答えは消す（同じ記録に 2 つの物差しを残さない。g・c・x・jv は下で上書き）
-      const ans = { g: res.g, c: res.c, x: res.x, jv: shzFjVersion() };
       await chrome.storage.local.set({ [k]: { ...rest, ...ans }, ...(fast ? {} : { judgeDay: { d: today, n: used + 1 } }) });
       const after = await chrome.storage.local.get({ recordClearedAt: 0, textClearedAt: 0 });
       if (after.recordClearedAt !== st.recordClearedAt) await chrome.storage.local.remove(k); // 「すべて消す」が割り込んだ
-      else if (after.textClearedAt !== st.textClearedAt && latest.ts < after.textClearedAt) await chrome.storage.local.set({ [k]: { feed: latest.feed, ts: latest.ts, ...(latest.auto ? { auto: 1 } : {}), ...ans } }); // 「本文だけ消す」が割り込んだ
+      else if (after.textClearedAt !== st.textClearedAt && latest.ts < after.textClearedAt) { const { text, ...kept } = { ...rest, ...ans }; await chrome.storage.local.set({ [k]: kept }); } // 「本文だけ消す」が割り込んだ
       await shzFjSleep(fast ? SHZ_FJ.sessionGapMs : SHZ_FJ.gapMs);
     }
   } finally {

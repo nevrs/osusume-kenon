@@ -1,6 +1,6 @@
 // 「おすすめ」で見せられた投稿の記録（DESIGN.md D9）。設定でオンにしたときだけ動く（初期値はオフ）。
 // 画面に 0.5 秒以上出ていた投稿の本文を、端末の中（chrome.storage.local）に残す。X へは何も送らず、X の画面を動かさない（スクロールもしない）。
-// 残すもの: 印（元の ID から作った短い文字列。重複を見分けるためのもの）・本文・おすすめ/フォロー中の別・時刻。
+// 残すもの: 印（元の ID から作った短い文字列。重複を見分けるためのもの）・本文・おすすめ/フォロー中の別・時刻・反応の数と投稿からの分（D25）。
 // 投稿者名の欄・リンクの欄は残さない（ただし本文に入っている @アカウント名や URL はそのまま残る）。古い記録は自動で消す。
 
 const SHZ_DWELL_MS = 500; // この間、画面に出ていたら「見た」とする
@@ -37,7 +37,9 @@ async function shzCapture(article) {
   if (gen !== shzGen || epoch !== shzEpoch) return; // 待っている間にオフ・全削除された
   if (shzSeen.has(key)) return;
   shzSeen.add(key);
-  shzQueue[`rec:${key}`] = { text, feed, ts: Date.now(), ...(shzDevAuto() ? { auto: 1 } : {}) };
+  // 反応の数（ct）と投稿からの分（age）は、見た時点のもの（D25）。数はあとで増えるが、記録し直さない
+  const ct = shzPostCounts(article, document.documentElement.lang), age = shzPostAgeMin(article);
+  shzQueue[`rec:${key}`] = { text, feed, ts: Date.now(), ...(ct ? { ct } : {}), ...(age !== null ? { age } : {}), ...(shzDevAuto() ? { auto: 1 } : {}) };
   if (!shzFlushTimer) shzFlushTimer = setTimeout(shzFlush, SHZ_FLUSH_MS); // 新しく記録するたびに待ち直さない（スクロール中に保存されなくなるため）
 }
 

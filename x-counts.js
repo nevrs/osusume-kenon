@@ -1,4 +1,4 @@
-// 投稿の数の行（返信・リポスト・いいね等）を読む関数。拡張では使わない（調査用。test/x-counts.test.js で試験）。
+// 投稿の数の行（返信・リポスト・いいね等）を読む関数と、「目立つ投稿」の見分け方（DESIGN.md D25）。記録（record.js）・たたむ（fold.js）・設定画面が使う。test/x-counts.test.js で試験。
 // 数の読み方は、日本語のおすすめ 45 件で確認（2026-10-20）:
 //   保存した分（実機の数は公開していない。test/x-counts.test.js に作り物の例）: 数は省略しない正確な値。文に返信が無い投稿は、返信ボタンも 0 件
 //   ページ上で数えただけの分（保存していない）: どの投稿にも数の行がちょうど1つ。引用のある 6 件で、引用の枠の中に数
@@ -49,4 +49,28 @@ function countsOf(label, lang) {
   return c;
 }
 
-if (typeof module !== "undefined") module.exports = { parseCount, parseActionLabel, countsOf };
+// 投稿の数 {r 返信, p リポスト, l いいね, b ブックマーク, v 表示}。数の行が無い・読めなければ null。日本語の画面でなければ、文に無い種類は null のまま
+function shzPostCounts(article, lang) {
+  const bar = article.querySelector('[role="group"][aria-label]'); // x-dom.js の X_DOM.actionBar（node の試験でも使うので、ここに書く）
+  const c = bar && countsOf(bar.getAttribute("aria-label"), lang);
+  return c ? { r: c.replies, p: c.reposts, l: c.likes, b: c.bookmarks, v: c.views } : null;
+}
+
+// 投稿されてからの分。引用の枠の外の、最初の日時（time[datetime]）から。読めなければ null
+function shzPostAgeMin(article, nowMs = Date.now()) {
+  for (const t of article.querySelectorAll("time[datetime]")) {
+    if (t.closest('div[role="link"]')) continue; // 引用元の日時
+    const ms = Date.parse(t.getAttribute("datetime"));
+    return Number.isFinite(ms) ? Math.max(0, Math.round((nowMs - ms) / 60_000)) : null;
+  }
+  return null;
+}
+
+// 「目立つ投稿」の見分け方（D25。基準は仮。実際の数でまだ確かめていない）
+//   荒れ（rowdy）: 返信が SHZ_HEAT.replyMin 件以上あり、いいね以上。賛成より言い合い・反発が集まっている形
+//   大きく広まった（wide）: 表示が SHZ_HEAT.reach 以上
+const SHZ_HEAT = { replyMin: 20, reach: 100_000 };
+const shzRowdy = (ct) => !!ct && ct.r != null && ct.l != null && ct.r >= SHZ_HEAT.replyMin && ct.r >= ct.l;
+const shzWide = (ct) => !!ct && ct.v != null && ct.v >= SHZ_HEAT.reach;
+
+if (typeof module !== "undefined") module.exports = { parseCount, parseActionLabel, countsOf, shzPostCounts, shzPostAgeMin, SHZ_HEAT, shzRowdy, shzWide };

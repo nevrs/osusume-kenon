@@ -27,7 +27,7 @@ function setup(stored = {}) {
     },
     onChanged: { addListener: (f) => listeners.push(f) },
   } };
-  w.eval(["i18n.js", "record-core.js", "stats-core.js", "options.js"].map((f) => fs.readFileSync(path.join(repo, f), "utf8")).join(";\n"));
+  w.eval(["i18n.js", "x-counts.js", "record-core.js", "stats-core.js", "options.js"].map((f) => fs.readFileSync(path.join(repo, f), "utf8")).join(";\n"));
   const d = w.document;
   const text = (id) => d.getElementById(id).textContent;
   return { w, d, store, text, click: (id) => d.getElementById(id).click() };
@@ -41,6 +41,7 @@ function many(prefix, feed, n, hits, ts = now - 1000) {
   for (let i = 0; i < n; i++) o[`rec:${prefix}${i}`] = J(feed, ts - i, i < hits, { text: "本文" });
   return o;
 }
+const shzDayOf = (ts) => { const d = new Date(ts), p = (n) => String(n).padStart(2, "0"); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; };
 const results = [];
 const check = (name, ok, detail) => results.push(`${ok ? "OK" : "NG"}  ${name}${!ok && detail ? `
     → ${detail}` : ""}`);
@@ -49,6 +50,7 @@ const check = (name, ok, detail) => results.push(`${ok ? "OK" : "NG"}  ${name}${
   // 記録なし
   let t = setup();
   await wait(400);
+  check("記録が無いときは、見出しが「まだ測れていません」で、温度計を出さない", t.text("heroHeadline") === "まだ測れていません" && !t.d.querySelector("#gauges .gauge"));
   check("記録が無いときは「なし」と、始め方を出す", t.text("recCount") === "なし" && t.text("trendNote").includes("まだ記録がありません") && t.d.getElementById("trendTable").hidden);
 
   // 傾向: おすすめ 40 件中 20、フォロー中 40 件中 4
@@ -58,10 +60,19 @@ const check = (name, ok, detail) => results.push(`${ok ? "OK" : "NG"}  ${name}${
   check("おすすめ 50%・フォロー中 10% と、差 40 ポイントを出す", note.includes("おすすめ 50%") && note.includes("フォロー中 10%") && note.includes("40 ポイント高い"));
   check("件数の表示（80 件・判定済み 80 件）", t.text("recCount").includes("80 件") && t.text("recCount").includes("判定済み 80"));
   check("「アルゴリズムが押し上げた量ではない」と画面に書いてある", t.d.body.textContent.includes("アルゴリズムが押し上げた量ではありません"));
+  check("見出し: はっきり差があれば「おすすめのほうが、フォロー中より熱い」と倍率を出す（D22）", t.text("heroHeadline").includes("熱い") && t.text("heroSub").includes("約 5.0 倍"), `${t.text("heroHeadline")} / ${t.text("heroSub")}`);
+  check("温度計が 2 本あり、段ごとの塗りとぶれの幅が付く", t.d.querySelectorAll("#gauges .gauge").length === 2 && t.d.querySelectorAll("#gauges .seg").length >= 2 && t.d.querySelectorAll("#gauges .band").length === 2);
+  check("比べる材料の棒（40 / 200）", t.text("readyBars").includes("40 / 200"));
+
+  // はっきりしない差: 倍率を出さない
+  t = setup({ ...many("a", "for-you", 40, 6), ...many("b", "following", 40, 4) });
+  await wait(400);
+  check("はっきりしない差なら、見出しにそう書き、倍率は出さない", t.text("heroHeadline").includes("はっきりした差はまだ見えません") && !t.text("heroSub").includes("倍") && t.text("heroSub").includes("5 ポイント多い"), `${t.text("heroHeadline")} / ${t.text("heroSub")}`);
 
   // 件数が足りない
   t = setup({ ...many("a", "for-you", 40, 20), ...many("b", "following", 10, 5) });
   await wait(400);
+  check("件数が足りなければ、見出しは「まだ比べられません」", t.text("heroHeadline") === "まだ比べられません");
   check("片方が 30 件に満たなければ、差を出さずに理由を出す", t.text("trendNote").includes("30 件以上要ります") && !t.text("trendNote").includes("ポイント"));
   check("満たない割合は「—」で、件数を添える", [...t.d.querySelectorAll("#trendTable td.muted")].some((td) => td.textContent.includes("—") && td.textContent.includes("10件")));
 
@@ -69,6 +80,41 @@ const check = (name, ok, detail) => results.push(`${ok ? "OK" : "NG"}  ${name}${
   t = setup({ ...many("a", "for-you", 40, 20, now - 20 * DAY), ...many("b", "following", 40, 4, now - 20 * DAY) });
   await wait(400);
   check("直近 14 日の外の記録は、傾向の表に入れない（日ごとの表には残る）", t.text("trendNote").includes("直近 14 日の記録がありません") && t.d.getElementById("trendTable").hidden && t.d.querySelectorAll("#dayTable tr").length >= 2, `${t.text("trendNote")} / 日の行 ${t.d.querySelectorAll("#dayTable tr").length}`);
+
+  // 話題の重なり（D23）: おすすめ 政治 30・ゲーム 30、フォロー中 政治 15・ゲーム 45 → 重なり 75%
+  const tops = {};
+  for (let i = 0; i < 60; i++) tops[`rec:ta${i}`] = J("for-you", now - 1000 - i, false, { tp: i < 30 ? "politics" : "games", tv: "tp2" });
+  for (let i = 0; i < 60; i++) tops[`rec:tb${i}`] = J("following", now - 1000 - i, false, { tp: i < 15 ? "politics" : "games", tv: "tp2" });
+  t = setup(tops);
+  await wait(400);
+  check("話題の重なりを出し、はっきり差のある話題（99% の検定）に印を付ける", t.text("topicHeadline").includes("75%") && t.d.querySelectorAll("#topicRows .topic").length === 2 && t.text("topicRows").includes("おすすめで多い") && t.text("topicRows").includes("政治"), `${t.text("topicHeadline")} / ${t.text("topicRows")}`);
+  t = setup({ ...many("a", "for-you", 40, 20) });
+  await wait(400);
+  check("話題の件数が足りなければ、重なりを出さず理由を出す", t.text("topicHeadline") === "まだ出せません" && t.text("topicSub").includes("50 件以上"));
+
+  // 目立たされる投稿（D25）: おすすめ 40 件中 荒れ 12（うち見下し 10）、フォロー中 40 件中 荒れ 2
+  const R = { r: 50, p: 0, l: 10, b: 0, v: 3000 }, C = { r: 1, p: 0, l: 10, b: 0, v: 300 };
+  const heat = {};
+  for (let i = 0; i < 40; i++) heat[`rec:ha${i}`] = J("for-you", now - 1000 - i, i < 10, { ct: i < 12 ? R : C, age: 300 });
+  for (let i = 0; i < 40; i++) heat[`rec:hb${i}`] = J("following", now - 1000 - i, false, { ct: i < 2 ? R : C, age: 30 });
+  t = setup(heat);
+  await wait(400);
+  check("目立つ投稿: はっきり多ければ見出しにそう書き、割合と行ごとの印を出す", t.text("heatHeadline").includes("目立つ投稿が多く") && t.text("heatSub").includes("おすすめ 30%") && t.text("heatSub").includes("フォロー中 5.0%") && t.d.querySelectorAll("#heatRows .topic").length === 3 && t.text("heatRows").includes("おすすめで多い"), `${t.text("heatHeadline")} / ${t.text("heatSub")} / ${t.text("heatRows")}`);
+  check("目立つ投稿の中の見下し・排除は、件数が足りなければ理由を出す", t.text("heatHostile").includes("14 件・66 件"), t.text("heatHostile"));
+  check("投稿からの時間の中ほどを出す", t.text("heatAge").includes("5 時間") && t.text("heatAge").includes("30 分"), t.text("heatAge"));
+  check("基準の説明に数を入れる", t.text("heatRowsNote").includes("20 件以上") && t.text("heatRowsNote").includes("100,000"), t.text("heatRowsNote"));
+  t = setup({ ...many("a", "for-you", 40, 20) });
+  await wait(400);
+  check("数の記録が無ければ、目立つ投稿は「まだ比べられません」", t.text("heatHeadline") === "まだ比べられません" && t.text("heatSub").includes("0.15.0"));
+  // たたむ設定
+  t = setup({ heatFoldDay: { d: shzDayOf(now), n: 4, o: 1 } });
+  await wait(400);
+  check("たたむ: 初期値はオフ、荒れているはオン、広まったはオフ", !t.d.getElementById("heatFoldEnabled").checked && t.d.getElementById("foldRowdy").checked && !t.d.getElementById("foldWide").checked);
+  check("今日たたんだ件数と開いた件数を出す", t.text("foldToday").includes("4 件") && t.text("foldToday").includes("1 件"), t.text("foldToday"));
+  t.click("heatFoldEnabled");
+  t.click("foldWide");
+  await wait(50);
+  check("たたむのオン・形の選び方を保存する", t.store.heatFoldEnabled === true && t.store.heatFoldRules?.wide === true && t.store.heatFoldRules?.rowdy === true);
 
   // 判定の版の混在
   t = setup({ ...many("a", "for-you", 40, 20), "rec:x": J("for-you", now, true, { jv: "group2/c156" }) });

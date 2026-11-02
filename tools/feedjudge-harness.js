@@ -15,7 +15,16 @@ function setup({ stored = {}, cap = 300, availability = "available", aiDelay = 0
   if (recordEnabled) store.recordEnabled = true;
   if (session) store.session = session;
   const listeners = [];
-  const calls = { prompts: [], creates: 0, concurrent: 0, maxConcurrent: 0 };
+  const calls = { prompts: [], topics: [], creates: 0, topicCreates: 0, concurrent: 0, maxConcurrent: 0 };
+  // 話題の問い（D23）は、見下し・排除の問いと別に数える。「試合」を含めば sports、「話題だめ」を含めば失敗、それ以外は life
+  const topicClone = () => ({
+    prompt: async (p) => {
+      calls.topics.push(p);
+      if (/話題だめ/.test(p)) throw new Error("話題だけ失敗");
+      return JSON.stringify({ topic: /試合/.test(p) ? "sports" : "life" });
+    },
+    destroy() {},
+  });
   const clone = () => ({
     prompt: async (p, opts) => {
       calls.prompts.push(p);
@@ -29,7 +38,10 @@ function setup({ stored = {}, cap = 300, availability = "available", aiDelay = 0
     },
     destroy() {},
   });
-  const ai = { state: availability, availability: async () => ai.state, create: async () => { calls.creates++; return { clone: async () => clone(), destroy() {} }; } };
+  const ai = { state: availability, availability: async () => ai.state, create: async (o) => {
+    if (o.initialPrompts[0].content.includes("話題")) { calls.topicCreates++; return { clone: async () => topicClone(), destroy() {} }; }
+    calls.creates++; return { clone: async () => clone(), destroy() {} };
+  } };
   if (!noAI) w.LanguageModel = ai;
   Object.defineProperty(w.document, "visibilityState", { value: hidden ? "hidden" : "visible", configurable: true });
   const copy = (v) => JSON.parse(JSON.stringify(v));
@@ -70,7 +82,8 @@ const check = (name, ok, detail) => results.push(`${ok ? "OK" : "NG"}  ${name}${
   const a = t.store["rec:a"], b = t.store["rec:b"], c = t.store["rec:c"], d = t.store["rec:d"];
   check("未判定の記録に、ひとまとめ・見下し・排除の答え（0/1）と版を書く", a.g === 1 && a.c === 1 && a.x === 0 && b.g === 0 && b.c === 0 && d.x === 1 && d.g === 0 && a.jv === "ev1/c155" && !("m" in a), JSON.stringify([a, d]));
   check("AI が抜き出した言葉が本文に無ければ、当てはまらないとする", c.g === 0 && c.c === 0 && c.x === 0, JSON.stringify(c));
-  check("抜き出した言葉は記録に残さない", Object.keys(a).sort().join() === "c,feed,g,jv,text,ts,x", JSON.stringify(a));
+  check("話題（D23）も別の問いで判定し、tp と版 tv を書く", a.tp === "life" && a.tv === "tp2" && t.calls.topicCreates === 1 && t.calls.topics.length === 4 && t.calls.topics.every((p) => p.startsWith("投稿:\n")), JSON.stringify(a));
+  check("抜き出した言葉は記録に残さない", Object.keys(a).sort().join() === "c,feed,g,jv,text,tp,ts,tv,x", JSON.stringify(a));
   check("本文・おすすめ/フォロー中・時刻は変えない", a.text === "馬鹿じゃないの" && a.feed === "for-you" && b.feed === "following" && typeof a.ts === "number");
   check("AI の元は 1 回だけ作る", t.calls.creates === 1);
   check("同時に 2 件は判定しない", t.calls.maxConcurrent === 1);
@@ -209,12 +222,27 @@ const check = (name, ok, detail) => results.push(`${ok ? "OK" : "NG"}  ${name}${
   await wait(400);
   check("（前提）パッシブの判定は 1 日の件数に数える", t.store.judgeDay?.n === 2);
 
+  // 話題だけ未判定の記録（D23 より前に判定済み）は、話題だけを判定し、見下し・排除の答えは変えない
+  t = setup({ stored: { "rec:a": rec("昨日の試合", Date.now(), "for-you", { g: 0, c: 1, x: 0, jv: "ev1/c155" }), "rec:b": rec("馬鹿 話題だめ") } });
+  await wait(400);
+  const ta = t.store["rec:a"], tb = t.store["rec:b"];
+  check("判定済みで話題の無い記録は、話題だけを判定する", ta.tp === "sports" && ta.c === 1 && ta.jv === "ev1/c155" && !t.calls.prompts.some((p) => p.includes("試合")), JSON.stringify(ta));
+  check("話題の判定だけ失敗しても、見下し・排除の答えは書き、話題は書かない", tb.c === 1 && !("tp" in tb), JSON.stringify(tb));
+  const nt = t.calls.topics.length;
+  await t.run();
+  check("話題の判定に失敗した記録を、見回りのたびに繰り返し試さない", t.calls.topics.length === nt);
+
+  // 話題だけの判定し直しより、見下し・排除が未判定の記録を先にする（1 日の上限を、古い記録の話題で使い切らない）
+  t = setup({ cap: 1, stored: { "rec:old": rec("古い試合", Date.now() - 5 * DAY, "for-you", { g: 0, c: 0, x: 0, jv: "ev1/c155" }), "rec:new": rec("新しい馬鹿") } });
+  await wait(300);
+  check("見下し・排除が未判定の記録を、話題だけの記録より先に判定する", t.store["rec:new"].c === 1 && !("tp" in t.store["rec:old"]), JSON.stringify([t.store["rec:new"], t.store["rec:old"]]));
+
   // AI の元の複製が壊れたら、元を作り直す（このタブの全件を飛ばし続けない）
   let cloneBroken = true;
   t = setup({ stored: { "rec:a": rec("馬鹿"), "rec:b": rec("ふつう") } });
   const origCreate = t.ai.create;
-  t.ai.create = async () => {
-    const base = await origCreate();
+  t.ai.create = async (o) => {
+    const base = await origCreate(o);
     const c = base.clone;
     base.clone = async () => { if (cloneBroken) throw new Error("元が壊れた"); return c(); };
     return base;

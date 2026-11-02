@@ -89,6 +89,78 @@
       return { lump: o.target === "people" && found(o.group, text), contempt: human && found(o.insult, text), exclusion: human && found(o.exclusion, text), mobilize: false, target: o.target, ev: [o.group, o.insult, o.exclusion] };
     },
   };
+  // tp1: 話題を 1 つ選ばせる（DESIGN.md D23）。最初の版（今の拡張は tp2）。集計は tools/topic_stats.js
+  const TOPICS = ["politics", "society", "world", "economy", "tech", "games", "anime", "celeb", "sports", "life", "hobby", "other"];
+  VARIANTS.tp1 = {
+    system: [
+      "あなたは SNS の投稿を読み、その投稿の主な話題を次の一覧から 1 つだけ選ぶ。いくつか当てはまるときは、いちばん中心のものを選ぶ。どれにも当てはまらなければ other。",
+      "politics: 政治・選挙・政党・政策・行政・議員",
+      "society: 国内の社会のできごと・事件・事故・災害・裁判・差別や人権の問題",
+      "world: 外国のできごと・国際関係・戦争",
+      "economy: 経済・物価・お金・投資・仕事・会社",
+      "tech: 科学・技術・IT・AI・ネットのサービス",
+      "games: ゲーム",
+      "anime: アニメ・漫画・小説・映画・ドラマ",
+      "celeb: 芸能人・有名人・音楽・配信者",
+      "sports: スポーツ",
+      "life: 暮らし・日常・食べ物・家族・ペット・健康・気持ち",
+      "hobby: そのほかの趣味・創作・旅行・ファッション",
+      "other: どれでもない",
+    ].join("\n"),
+    schema: { type: "object", properties: { topic: { type: "string", enum: TOPICS } }, required: ["topic"] },
+    pick: (o) => ({ topic: o.topic }),
+  };
+  // tp2: tp1 で「暮らし」に吸い込まれた話題（映画・音楽・ガチャ・走る）を説明に書き足し、life は最後の受け皿にした。feed-judge.js の SHZ_FJ_TOPIC と同じ文（research/topic-record.md）
+  VARIANTS.tp2 = {
+    system: [
+      "あなたは SNS の投稿を読み、その投稿の主な話題を次の一覧から 1 つだけ選ぶ。いくつか当てはまるときは、いちばん中心のものを選ぶ。life は、ほかのどれにも当てはまらない身の回りの話のときだけ選ぶ。",
+      "politics: 国内の政治・選挙・政党・政策・国会・議会・行政・議員",
+      "society: 国内の社会のできごと・事件・事故・火事・災害・交通の乱れ・裁判・差別や人権の問題",
+      "world: 外国のできごと・外国の政治や選挙・国際関係・関税・戦争・外国の天気や災害",
+      "economy: 経済・物価・値上げ・円安・お金・投資・仕事・転職・給料・会社",
+      "tech: 科学・技術・宇宙・研究・IT・AI・スマホ・ネットのサービス",
+      "games: ゲーム（スマホのゲーム・ガチャ・対戦・RPG を含む）",
+      "anime: アニメ・漫画・小説・映画・ドラマ（作品の感想を含む）",
+      "celeb: 芸能人・俳優・歌手・バンド・アイドル・新曲・ライブ・配信者",
+      "sports: スポーツ（観戦も、自分で走る・運動するのも含む）",
+      "hobby: 趣味・手芸・創作・旅行・温泉・お出かけ・ファッション・買い物",
+      "life: 暮らし・日常・食べ物・家族・ペット・健康・気持ち",
+      "other: 意味のある話題が無い（あいさつ・記号・テスト）",
+    ].join("\n"),
+    schema: { type: "object", properties: { topic: { type: "string", enum: ["politics", "society", "world", "economy", "tech", "games", "anime", "celeb", "sports", "hobby", "life", "other"] } }, required: ["topic"] },
+    pick: (o) => ({ topic: o.topic }),
+  };
+  // rb1: 怒りで反応を集める作り（レイジベイト。DESIGN.md D26）の手口を、根拠の言葉を抜き出させて見る。AI が作ったかどうかは問わない。
+  // 例を問いに書くと AI が書き写す（ev1）ので、例は書かず、型を言葉で説明する。抜き出した言葉が本文に無ければ当てはまらないとする（ev2 と同じ near）。集計は tools/ragebait_stats.js
+  VARIANTS.rb1 = {
+    system: [
+      "あなたは SNS の投稿を読み、読む人を怒らせて反応（返信・引用・反論）を集めるための作りが使われているかを見る。次の言葉を投稿の本文から短く（それぞれ 20 文字以内で）そのまま抜き出して答える。当てはまる言葉が無ければ空の文字列にする。迷ったら空にする。投稿の主張が正しいか、どの立場の意見かは問わない。",
+      "story（腹の立つ体験談）: 書き手が見た・された、という他人のふるまいの話で、読む人が腹を立てるように描かれている部分。自分の失敗談、うれしかった話、報道やお知らせなら空。",
+      "blame（集団への矛先）: 怒りや非難を、実在の人々の集団（性別・世代・職業・立場・地域・国籍など）にまとめて向けている言葉。特定の個人・会社・役所・作品への批判だけなら空。",
+      "bait（言い争いへの誘い）: 読む人に賛否や反論を迫る、言い争いをけしかける、同意して怒るよう求める言葉。答えのある質問、情報のお願い、遊びの投票、お知らせなら空。",
+      "extreme（極端な決めつけ）: 例外を認めない言い切り、相手を全否定する言い方、資格や存在そのものを否定する言葉。",
+    ].join("\n"),
+    schema: evSchema(["story", "blame", "bait", "extreme"]),
+    pick: (o, text) => ({ story: near(o.story, text), blame: near(o.blame, text), bait: near(o.bait, text), extreme: near(o.extreme, text), ev: [o.story, o.blame, o.bait, o.extreme] }),
+  };
+  // rbs: 比べるための 1 つの点（0〜100）。手口に分けずに、狙いの強さだけを聞く
+  VARIANTS.rbs = {
+    system: "あなたは SNS の投稿を読み、その投稿が、読む人を怒らせて反応（返信・引用・反論）を集めるように作られている度合いを 0〜100 の整数で答える。100 は明らかにそう作られている、0 はまったくそうではない。投稿の主張が正しいか、どの立場の意見かは問わない。書き手がただ怒っている・困っているだけで、読む人をけしかけていなければ低くする。",
+    schema: { type: "object", properties: { rage: SCORE }, required: ["rage"] },
+    pick: (o) => ({ rage: o.rage }),
+  };
+  // rbs2: rbs で、公人の具体的な発言への落ち着いた批判と、注意を促すお知らせに高い点を付けたので、低くする場合に書き足す。
+  // rb1 は手口を抜き出せなかった（決めつけは 0 件）ので、いちばん目立つ手口を選択肢から 1 つ選ばせる（話題の判定 tp と同じ形）
+  const RB_KIND = ["story", "blame", "bait", "extreme", "none"];
+  VARIANTS.rbs2 = {
+    system: [
+      VARIANTS.rbs.system,
+      "次の場合は低くする: 特定の公人・会社・役所の具体的な発言や行いへの、筋道の通った批判。事故・回収・災害などの注意を促すお知らせ。答えのある質問や、遊びの投票。",
+      "kind（いちばん目立つ手口）を 1 つ選ぶ: story=腹の立つ体験談（見た・された話で、読む人が腹を立てるように描く）、blame=怒りを人々の集団（性別・世代・職業・立場・地域・国籍など）にまとめて向ける、bait=賛否や反論を迫る・言い争いをけしかける、extreme=例外を認めない言い切り・資格や存在の否定、none=どれも無い。",
+    ].join("\n"),
+    schema: { type: "object", properties: { rage: SCORE, kind: { type: "string", enum: RB_KIND } }, required: ["rage", "kind"] },
+    pick: (o) => ({ rage: o.rage, kind: o.kind }),
+  };
   window.__R = [];
   window.__done = false;
   (async () => {

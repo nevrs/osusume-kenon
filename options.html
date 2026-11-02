@@ -2,77 +2,222 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Timeline Checker for X</title>
 <style>
-  body { font: 15px/1.7 system-ui, sans-serif; max-width: 640px; margin: 24px auto; padding: 0 16px; color: #1d2a35; }
+  :root {
+    --bg: #f4f6f8; --card: #ffffff; --text: #1d2a35; --muted: #66727e; --line: #d8dee4; --track: #eceff2;
+    --fy: #c9533d; --fy1: #e9a294; --fy2: #d97563; --fy3: #a3321f;
+    --fl: #3f78b0; --fl1: #a3c2e0; --fl2: #6c9bc9; --fl3: #24527f;
+    --ok: #2e7d4f; --warn: #8a4b00;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14191e; --card: #1d242b; --text: #e3e8ec; --muted: #9aa6b1; --line: #33404b; --track: #2a333c;
+      --fy: #e07a64; --fy1: #7a4036; --fy2: #b85a47; --fy3: #f2a594;
+      --fl: #6fa3d6; --fl1: #34506d; --fl2: #4f7ba6; --fl3: #a9cdf0;
+      --ok: #6cc28f; --warn: #e0a65a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { font: 15px/1.7 system-ui, sans-serif; margin: 0; padding: 20px 16px 48px; background: var(--bg); color: var(--text); }
+  main { max-width: 720px; margin: 0 auto; }
+  header { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+  h1 { font-size: 20px; margin: 0; }
+  h2 { font-size: 16px; margin: 0 0 8px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; margin: 0 0 14px; }
+  details.card > summary { cursor: pointer; font-weight: 600; }
+  details.card[open] > summary { margin-bottom: 8px; }
   label { display: flex; gap: 10px; align-items: flex-start; }
-  input { margin-top: 6px; }
-  .note { color: #555; font-size: 13px; margin: 4px 0 0 26px; }
-  h2 { font-size: 17px; margin: 28px 0 4px; }
-  table { border-collapse: collapse; margin: 8px 0 0 26px; font-size: 13px; }
-  th, td { border-bottom: 1px solid #d8dee4; padding: 4px 10px; text-align: right; }
+  input[type="checkbox"] { margin-top: 6px; }
+  .note { color: var(--muted); font-size: 13px; margin: 6px 0 0; }
+  .note strong { color: var(--text); }
+  .muted { color: var(--muted); }
+  .warn { color: var(--warn); }
+  button { font: inherit; font-size: 13px; padding: 5px 12px; margin: 4px 6px 0 0; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--text); cursor: pointer; }
+  button:hover { border-color: var(--muted); }
+  button.primary { background: var(--fl); border-color: var(--fl); color: #fff; }
+  select { font: inherit; font-size: 13px; }
+
+  /* 温度（D22） */
+  .headline { font-size: 20px; font-weight: 700; margin: 4px 0 0; }
+  .headline.higher { color: var(--fy); }
+  .headline.lower { color: var(--fl); }
+  .sub { font-size: 14px; margin: 2px 0 10px; }
+  .gauge { display: grid; grid-template-columns: 84px 1fr 64px; gap: 10px; align-items: center; margin: 10px 0; }
+  .gauge .name { font-weight: 600; font-size: 14px; }
+  .gauge .val { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
+  .gauge .val small { display: block; font-weight: 400; font-size: 11px; color: var(--muted); }
+  .track { position: relative; height: 22px; background: var(--track); border-radius: 6px; overflow: hidden; }
+  .seg { position: absolute; top: 0; bottom: 0; }
+  .band { position: absolute; top: 50%; height: 2px; margin-top: -1px; background: var(--text); opacity: .55; }
+  .band::before, .band::after { content: ""; position: absolute; top: -5px; width: 2px; height: 12px; background: var(--text); }
+  .band::before { left: 0; } .band::after { right: 0; }
+  .scale { display: grid; grid-template-columns: 84px 1fr 64px; gap: 10px; font-size: 11px; color: var(--muted); }
+  .scale span:nth-child(2) { display: flex; justify-content: space-between; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--muted); margin-top: 8px; }
+  .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; margin-right: 4px; }
+  .ready { display: grid; grid-template-columns: 84px 1fr 96px; gap: 10px; align-items: center; font-size: 12px; margin: 4px 0; }
+  .ready .track { height: 8px; }
+  .ready .fill { position: absolute; inset: 0 auto 0 0; background: var(--muted); }
+  .ready .fill.full { background: var(--ok); }
+  .foot { font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 8px; margin-top: 12px; }
+  .foot strong { color: var(--text); }
+
+  /* 話題の重なり（D23） */
+  .topic { display: grid; grid-template-columns: 110px 1fr 92px; gap: 10px; align-items: center; margin: 6px 0; font-size: 13px; }
+  .topic .pair { display: grid; gap: 3px; }
+  .topic .pair .track { height: 8px; }
+  .topic .pair .fill { position: absolute; inset: 0 auto 0 0; border-radius: 4px; }
+  .topic .num { text-align: right; font-variant-numeric: tabular-nums; font-size: 12px; color: var(--muted); }
+  .topic .num b { color: var(--text); font-weight: 600; }
+  .topic .more { color: var(--fy); font-weight: 600; }
+  .topic .less { color: var(--fl); font-weight: 600; }
+
+  /* 目立たされる投稿（D25） */
+  .fold { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 10px; }
+  .fold .rules { margin: 2px 0 0 26px; font-size: 14px; }
+
+  /* 推移 */
+  #dayChart { width: 100%; height: auto; display: block; margin-top: 4px; }
+  #dayChart text { font-size: 13px; fill: var(--muted); }
+  #dayChart .grid { stroke: var(--line); }
+
+  table { border-collapse: collapse; margin: 8px 0 0; font-size: 13px; width: 100%; }
+  th, td { border-bottom: 1px solid var(--line); padding: 4px 8px; text-align: right; }
   th:first-child, td:first-child { text-align: left; }
-  .muted { color: #8a949e; }
-  .bar { display: block; height: 6px; background: #c9533d; margin-top: 2px; }
-  .bar.following { background: #4a7fb5; }
-  .warn { color: #8a4b00; }
-  button { margin-right: 6px; }
-  .sample { margin: 8px 0 0 26px; padding: 6px 10px; border-left: 3px solid #d8dee4; font-size: 13px; }
-  .sample .meta { color: #555; }
-  .sample .meta b { color: #c9533d; }
+  .bar { display: block; height: 5px; background: var(--fy); margin-top: 2px; border-radius: 2px; }
+  .bar.following { background: var(--fl); }
+  .sample { margin: 8px 0 0; padding: 6px 10px; border-left: 3px solid var(--line); font-size: 13px; }
+  .sample .meta { color: var(--muted); }
+  .sample .meta b { color: var(--fy); }
   .sample .text { margin: 2px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+  #saved { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); max-width: calc(100% - 32px); background: var(--text); color: var(--bg); padding: 8px 14px; border-radius: 8px; font-size: 13px; margin: 0; }
+  #saved:empty { display: none; }
 </style>
 </head>
 <body>
-<h1 data-i18n="title"></h1>
-<p class="note"><label><span data-i18n="langLabel"></span> <select id="lang"><option value="auto" data-i18n="langAuto"></option><option value="ja">日本語</option><option value="en">English</option></select></label></p>
-<section>
-  <label><input type="checkbox" id="recordEnabled"> <span data-i18n="recLabel"></span></label>
-  <p class="note" data-i18n="recNote"></p>
-  <p class="note"><span data-i18n="recCountLabel"></span> <span id="recCount">…</span></p>
-  <p class="note"><button type="button" id="recStrip" data-i18n="recStrip"></button><button type="button" id="recDelete" data-i18n="recDelete"></button><button type="button" id="recExport" data-i18n="recExport"></button></p>
-</section>
-<section>
+<main>
+<header>
+  <h1 data-i18n="title"></h1>
+  <label class="note" style="margin:0;align-items:center"><span data-i18n="langLabel"></span> <select id="lang"><option value="auto" data-i18n="langAuto"></option><option value="ja">日本語</option><option value="en">English</option></select></label>
+</header>
+
+<section class="card" id="heroCard">
   <h2 data-i18n="trendH"></h2>
+  <p class="headline" id="heroHeadline"></p>
+  <p class="sub" id="heroSub"></p>
+  <div id="gauges"></div>
+  <div class="legend" id="legend" hidden>
+    <span><i style="background:var(--fy1)"></i><span data-i18n="thContempt"></span></span>
+    <span><i style="background:var(--fy2)"></i><span data-i18n="thLump"></span></span>
+    <span><i style="background:var(--fy3)"></i><span data-i18n="thExclusion"></span></span>
+    <span data-i18n="legendBand"></span>
+  </div>
+  <div id="readyBox" hidden>
+    <p class="note" id="readyH"></p>
+    <div id="readyBars"></div>
+  </div>
   <p class="note" id="trendNote">…</p>
-  <table id="trendTable" hidden></table>
-  <table id="dayTable" hidden></table>
-  <p class="note" data-i18n="trendFoot"></p>
-  <details id="sampleBox">
-    <summary class="note" data-i18n="sampleSummary"></summary>
-    <p class="note" data-i18n="sampleNote"></p>
-    <p class="note"><button type="button" id="sampleMore" data-i18n="sampleMore"></button><button type="button" id="sampleHit"></button><button type="button" id="sampleCopy" data-i18n="sampleCopy"></button></p>
-    <p class="note" id="sampleEmpty" hidden></p>
-    <div id="sampleList"></div>
+  <p class="foot" data-i18n="trendFoot"></p>
+</section>
+
+<section class="card">
+  <h2 data-i18n="chartH"></h2>
+  <svg id="dayChart" viewBox="0 0 640 180" role="img"></svg>
+  <p class="note" id="chartNote"></p>
+  <details>
+    <summary class="note" data-i18n="tableSummary"></summary>
+    <table id="trendTable" hidden></table>
+    <table id="dayTable" hidden></table>
   </details>
 </section>
-<section>
+
+<section class="card" id="topicCard">
+  <h2 data-i18n="topicH"></h2>
+  <p class="headline" id="topicHeadline"></p>
+  <p class="sub" id="topicSub"></p>
+  <div id="topicRows"></div>
+  <div class="legend" id="topicLegend" hidden>
+    <span><i style="background:var(--fy)"></i><span data-i18n="feedForYou"></span></span>
+    <span><i style="background:var(--fl)"></i><span data-i18n="feedFollowing"></span></span>
+  </div>
+  <p class="foot" data-i18n="topicFoot"></p>
+</section>
+
+<section class="card" id="heatCard">
+  <h2 data-i18n="heatH"></h2>
+  <p class="headline" id="heatHeadline"></p>
+  <p class="sub" id="heatSub"></p>
+  <div id="heatRows"></div>
+  <div class="legend" id="heatLegend" hidden>
+    <span><i style="background:var(--fy)"></i><span data-i18n="feedForYou"></span></span>
+    <span><i style="background:var(--fl)"></i><span data-i18n="feedFollowing"></span></span>
+  </div>
+  <p class="note" id="heatRowsNote"></p>
+  <p class="note" id="heatHostile"></p>
+  <p class="note" id="heatAge"></p>
+  <div class="fold">
+    <label><input type="checkbox" id="heatFoldEnabled"> <span data-i18n="foldLabel"></span></label>
+    <div class="rules">
+      <label><input type="checkbox" id="foldRowdy"> <span data-i18n="foldRowdy"></span></label>
+      <label><input type="checkbox" id="foldWide"> <span data-i18n="foldWide"></span></label>
+    </div>
+    <p class="note" data-i18n="foldNote"></p>
+    <p class="note" id="foldToday"></p>
+  </div>
+  <p class="foot" data-i18n="heatFoot"></p>
+</section>
+
+<section class="card">
   <h2 data-i18n="sessH"></h2>
   <p class="note" data-i18n="sessNote"></p>
-  <p class="note"><button type="button" id="sessStart" data-i18n="sessStart"></button><button type="button" id="sessEnd" hidden data-i18n="sessEnd"></button></p>
+  <p><button type="button" class="primary" id="sessStart" data-i18n="sessStart"></button><button type="button" class="primary" id="sessEnd" hidden data-i18n="sessEnd"></button></p>
+  <div id="sessBars"></div>
   <p class="note" id="sessProgress"></p>
   <table id="sessTable" hidden></table>
   <p class="note" id="sessDiff"></p>
 </section>
-<section>
+
+<section class="card">
+  <h2 data-i18n="recH"></h2>
+  <label><input type="checkbox" id="recordEnabled"> <span data-i18n="recLabel"></span></label>
+  <p class="note"><span data-i18n="recCountLabel"></span> <span id="recCount">…</span></p>
   <details>
-    <summary data-i18n="helpSummary"></summary>
-    <p class="note" data-i18n="help1"></p>
-    <p class="note" data-i18n="help2"></p>
-    <p class="note" data-i18n="help3"></p>
-    <p class="note" data-i18n="help4"></p>
-    <p class="note" data-i18n="help5"></p>
+    <summary class="note" data-i18n="recManage"></summary>
+    <p class="note" data-i18n="recNote"></p>
+    <p><button type="button" id="recStrip" data-i18n="recStrip"></button><button type="button" id="recDelete" data-i18n="recDelete"></button><button type="button" id="recExport" data-i18n="recExport"></button></p>
   </details>
 </section>
-<section>
-  <h2 data-i18n="logH"></h2>
+
+<details class="card" id="sampleBox">
+  <summary data-i18n="sampleSummary"></summary>
+  <p class="note" data-i18n="sampleNote"></p>
+  <p><button type="button" id="sampleMore" data-i18n="sampleMore"></button><button type="button" id="sampleHit"></button><button type="button" id="sampleCopy" data-i18n="sampleCopy"></button></p>
+  <p class="note" id="sampleEmpty" hidden></p>
+  <div id="sampleList"></div>
+</details>
+
+<details class="card">
+  <summary data-i18n="helpSummary"></summary>
+  <p class="note" data-i18n="help1"></p>
+  <p class="note" data-i18n="help2"></p>
+  <p class="note" data-i18n="help3"></p>
+  <p class="note" data-i18n="help4"></p>
+  <p class="note" data-i18n="help5"></p>
+</details>
+
+<details class="card">
+  <summary data-i18n="logH"></summary>
   <label><input type="checkbox" id="debugEnabled"> <span data-i18n="logLabel"></span></label>
   <p class="note" data-i18n="logNote"></p>
-  <p class="note"><button type="button" id="logCopy" data-i18n="logCopy"></button><button type="button" id="logClear" data-i18n="logClear"></button> <span id="logCount"></span></p>
+  <p><button type="button" id="logCopy" data-i18n="logCopy"></button><button type="button" id="logClear" data-i18n="logClear"></button> <span id="logCount" class="note"></span></p>
   <pre id="logView" class="note" style="max-height:240px;overflow:auto;white-space:pre-wrap;font-size:11px" hidden></pre>
-</section>
-<p id="saved" class="note" aria-live="polite"></p>
+</details>
+</main>
+<p id="saved" aria-live="polite"></p>
 <script src="i18n.js"></script>
+<script src="x-counts.js"></script>
 <script src="record-core.js"></script>
 <script src="stats-core.js"></script>
 <script src="options.js"></script>

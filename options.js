@@ -1,6 +1,7 @@
 // 設定画面。値は chrome.storage.local（この端末だけ）に置く
 const $ = (id) => document.getElementById(id);
-const say = (t) => { $("saved").textContent = t; };
+let sayTimer = 0;
+const say = (t) => { $("saved").textContent = t; clearTimeout(sayTimer); sayTimer = setTimeout(() => { $("saved").textContent = ""; }, 6000); };
 const feedLabel = (f) => shzT(f === "for-you" ? "feedForYou" : "feedFollowing");
 const SESSION_TARGET = 50; // 測定モードで、それぞれの feed について集める件数
 
@@ -118,11 +119,218 @@ function renderDays(recs) {
   dt.hidden = false;
 }
 
+// ---- 温度をひと目で見る部分（D22）。数字の文と表は今までどおり下に残す ----
+const svgNS = "http://www.w3.org/2000/svg";
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
+const pct1 = (x) => `${(x * 100).toFixed(x > 0 && x < 0.1 ? 1 : 0)}%`;
+const pctAxis = (x) => `${+(x * 100).toFixed(1)}%`; // 目盛り（12.5% を 13% と書かない）
+const FEEDVAR = { "for-you": "fy", following: "fl" };
+const LV_KEY = ["", "thContempt", "thLump", "thExclusion"];
+
+// 見出し: おすすめはフォロー中より熱いか。はっきりした差でなければ、そう書く
+function renderHeadline(t) {
+  const h = $("heroHeadline"), sub = $("heroSub");
+  h.className = "headline";
+  if (!t) { h.textContent = shzT("heroEmpty"); sub.textContent = ""; return; }
+  const c = shzCompare(t);
+  h.textContent = shzT({ need: "heroNeed", higher: "heroHigher", lower: "heroLower", unclear: "heroUnclear" }[c.verdict]);
+  if (c.verdict === "higher" || c.verdict === "lower") h.classList.add(c.verdict);
+  if (c.verdict === "need") { sub.textContent = shzT("heroNeedSub", { min: SHZ_MIN_N }); return; }
+  const d = Math.round(Math.abs(c.diff) * 1000) / 10;
+  // 倍率は、はっきり高いときだけ出す（はっきりしない差の倍率は、件数が少ないと大きく揺れて、強く見えすぎる）
+  sub.textContent = (c.verdict === "higher" && c.ratio !== null ? shzT("heroRatio", { r: c.ratio.toFixed(1) }) + " · " : "") + (d === 0 ? shzT("diffSame") : shzT(c.diff > 0 ? "heroDiffUp" : "heroDiffDown", { d }));
+}
+
+// 2 本の温度計。塗りは段ごと（排除・ひとまとめの見下し・見下し）、細い線は 90% の幅。目盛りは 2 本で共通
+function renderGauges(t) {
+  const box = $("gauges");
+  box.replaceChildren();
+  $("legend").hidden = !t;
+  if (!t) return;
+  const iv = Object.fromEntries(SHZ_FEEDS.map((f) => [f, shzInterval(t[f].any, t[f].judged)]));
+  const top = Math.max(0.05, ...SHZ_FEEDS.map((f) => (iv[f] && t[f].judged >= SHZ_MIN_N ? iv[f][1] : 0)));
+  const max = Math.ceil(top * 20) / 20; // 5% 刻みで切り上げ
+  const W = (x) => `${Math.min(100, (x / max) * 100)}%`;
+  for (const f of SHZ_FEEDS) {
+    const row = el("div", "gauge");
+    row.append(el("span", "name", feedLabel(f)));
+    const track = el("div", "track");
+    const n = t[f].judged, ok = n >= SHZ_MIN_N;
+    if (ok) {
+      let x = 0;
+      for (const lv of [3, 2, 1]) { // 重い段を左に
+        const w = t[f][`lv${lv}`] / n;
+        if (!w) continue;
+        const s = el("span", "seg");
+        s.style.left = W(x); s.style.width = W(w); s.style.background = `var(--${FEEDVAR[f]}${lv})`;
+        s.title = `${shzT(LV_KEY[lv])} ${pct1(w)}`;
+        track.append(s);
+        x += w;
+      }
+      const b = el("span", "band");
+      b.style.left = W(iv[f][0]); b.style.width = `calc(${W(iv[f][1])} - ${W(iv[f][0])})`;
+      b.title = `${pct1(iv[f][0])}〜${pct1(iv[f][1])}`;
+      track.append(b);
+    }
+    const val = el("span", "val", ok ? pct1(t[f].any / n) : "—");
+    val.append(el("small", "", shzT("gaugeN", { n })));
+    row.append(track, val);
+    box.append(row);
+  }
+  const scale = el("div", "scale");
+  const ticks = el("span");
+  for (const v of [0, max / 2, max]) ticks.append(el("span", "", pctAxis(v)));
+  scale.append(el("span"), ticks, el("span"));
+  box.append(scale);
+}
+
+// 比べる材料がどれだけそろったか（判定済みの件数。SHZ_GOOD_N で「十分」）
+function readyRow(label, n, goal) {
+  const row = el("div", "ready"), track = el("div", "track"), fill = el("span", n >= goal ? "fill full" : "fill");
+  fill.style.width = `${Math.min(100, (n / goal) * 100)}%`;
+  track.append(fill);
+  row.append(el("span", "", label), track, el("span", n >= goal ? "" : "muted", `${Math.min(n, goal)} / ${goal}`));
+  return row;
+}
+function renderReady(t) {
+  const box = $("readyBox"), bars = $("readyBars");
+  bars.replaceChildren();
+  box.hidden = !t;
+  if (!t) return;
+  $("readyH").textContent = shzT("readyH", { n: SHZ_GOOD_N });
+  for (const f of SHZ_FEEDS) bars.append(readyRow(feedLabel(f), t[f].judged, SHZ_GOOD_N));
+}
+
+// 日ごとの推移の線（直近 14 日）。その日の判定済みが CHART_MIN 件に満たない feed は点を打たない（少ない日の割合は大きくぶれる）
+const CHART_MIN = 10;
+function renderChart(recs) {
+  const svg = $("dayChart");
+  svg.replaceChildren();
+  const days = shzTallyByDay(recs);
+  const keys = [];
+  for (let i = 13; i >= 0; i--) keys.push(shzDay(Date.now() - i * 86_400_000));
+  const pts = Object.fromEntries(SHZ_FEEDS.map((f) => [f, keys.map((d, i) => { const t = days[d]?.[f]; return t && t.judged >= CHART_MIN ? { i, v: t.any / t.judged } : null; }).filter(Boolean)]));
+  const any = SHZ_FEEDS.some((f) => pts[f].length);
+  $("chartNote").textContent = shzT(any ? "chartNote" : "chartEmpty", { n: CHART_MIN });
+  svg.style.display = any ? "" : "none";
+  if (!any) return;
+  const L = 40, R = 630, T = 10, B = 140;
+  const top = Math.max(0.05, ...SHZ_FEEDS.flatMap((f) => pts[f].map((p) => p.v)));
+  const max = Math.ceil(top * 20) / 20;
+  const X = (i) => L + ((R - L) * i) / 13, Y = (v) => B - ((B - T) * v) / max;
+  const add = (tag, attrs, text, parent = svg) => { const e = document.createElementNS(svgNS, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); if (text !== undefined) e.textContent = text; parent.append(e); return e; };
+  for (const v of [0, max / 2, max]) {
+    add("line", { x1: L, x2: R, y1: Y(v), y2: Y(v), class: "grid" });
+    add("text", { x: L - 6, y: Y(v) + 3, "text-anchor": "end" }, pctAxis(v));
+  }
+  for (const i of [0, 7, 13]) add("text", { x: X(i), y: B + 16, "text-anchor": i === 0 ? "start" : i === 13 ? "end" : "middle" }, keys[i].slice(5).replace("-", "/"));
+  SHZ_FEEDS.forEach((f, k) => {
+    const color = `var(--${FEEDVAR[f]})`;
+    if (pts[f].length > 1) add("polyline", { points: pts[f].map((p) => `${X(p.i)},${Y(p.v)}`).join(" "), fill: "none", stroke: color, "stroke-width": 2 });
+    for (const p of pts[f]) add("title", {}, `${feedLabel(f)} ${keys[p.i]} ${pct1(p.v)}`, add("circle", { cx: X(p.i), cy: Y(p.v), r: 3.5, fill: color }));
+    add("rect", { x: L + k * 120, y: B + 28, width: 12, height: 3, fill: color });
+    add("text", { x: L + k * 120 + 16, y: B + 32 }, feedLabel(f));
+  });
+}
+
+// 話題の重なり（D23）。話題ごとに、おすすめとフォロー中の割合を 2 本の棒で並べる。差が偶然で説明しにくい話題に印を付ける
+const topicMemo = { sig: "", ov: null };
+function renderTopics(recs) {
+  const h = $("topicHeadline"), sub = $("topicSub"), rows = $("topicRows");
+  rows.replaceChildren();
+  h.className = "headline";
+  const tt = shzTopicTally(recs, Date.now() - 14 * 86_400_000);
+  const sig = JSON.stringify(tt); // 引き直しは件数が多いと 0.1 秒ほどかかるので、数が変わらなければ前の結果を使う（判定が進むたびに描き直すため）
+  if (sig !== topicMemo.sig) Object.assign(topicMemo, { sig, ov: shzTopicOverlap(tt) });
+  const ov = topicMemo.ov;
+  $("topicLegend").hidden = !ov;
+  if (!ov) {
+    h.textContent = shzT("topicNeed");
+    sub.textContent = shzT("topicNeedSub", { min: SHZ_TOPIC_MIN, a: tt["for-you"].n, b: tt.following.n });
+    return;
+  }
+  const o = Math.round(ov.overlap * 100);
+  h.textContent = shzT("topicOverlap", { o });
+  sub.textContent = shzT(ov.same ? "topicSame" : "topicDiff", { base: Math.round(ov.base * 100) });
+  const max = Math.max(...ov.rows.map((r) => Math.max(r.a, r.b)));
+  for (const r of ov.rows) {
+    const row = el("div", "topic"), pair = el("div", "pair");
+    for (const [f, v] of [["for-you", r.a], ["following", r.b]]) {
+      const track = el("div", "track"), fill = el("span", "fill");
+      fill.style.width = `${(v / max) * 100}%`;
+      fill.style.background = `var(--${FEEDVAR[f]})`;
+      fill.title = `${feedLabel(f)} ${pct1(v)}`;
+      track.append(fill);
+      pair.append(track);
+    }
+    const num = el("span", "num");
+    num.append(el("b", "", pct1(r.a)), ` / ${pct1(r.b)}`);
+    if (r.mark) num.append(el("div", r.mark > 0 ? "more" : "less", shzT(r.mark > 0 ? "topicMore" : "topicLess")));
+    row.append(el("span", "", shzT(`tp_${r.tp}`)), pair, num);
+    rows.append(row);
+  }
+}
+
+// 目立たされる投稿（D25）。荒れている・大きく広まった投稿の割合を、おすすめとフォロー中で並べる。差がはっきりした行に印を付ける
+const ageText = (m) => (m === null ? "—" : m < 60 ? shzT("ageMin", { n: m }) : m < 1440 ? shzT("ageHour", { n: Math.round(m / 60) }) : shzT("ageDay", { n: Math.round(m / 1440) }));
+function renderHeat(recs) {
+  const h = $("heatHeadline"), sub = $("heatSub"), rows = $("heatRows"), hostile = $("heatHostile"), age = $("heatAge");
+  rows.replaceChildren();
+  h.className = "headline";
+  hostile.textContent = age.textContent = "";
+  $("heatRowsNote").textContent = shzT("heatRowsNote", { r: SHZ_HEAT.replyMin, v: SHZ_HEAT.reach.toLocaleString() });
+  const t = shzHeatTally(recs, Date.now() - 14 * 86_400_000), A = t["for-you"], B = t.following;
+  const c = shzCompareCounts(A.heat, A.n, B.heat, B.n);
+  $("heatLegend").hidden = c.verdict === "need";
+  if (c.verdict === "need") {
+    h.textContent = shzT("heatNeed");
+    sub.textContent = shzT("heatNeedSub", { min: SHZ_MIN_N, a: A.n, b: B.n });
+    return;
+  }
+  h.textContent = shzT({ higher: "heatHigher", lower: "heatLower", unclear: "heatUnclear" }[c.verdict]);
+  if (c.verdict !== "unclear") h.classList.add(c.verdict);
+  sub.textContent = shzT("heatSub", { a: pct1(c.a), b: pct1(c.b) });
+  const lines = ["rowdy", "wide", "heat"].map((k) => ({ k, ...shzCompareCounts(A[k], A.n, B[k], B.n) }));
+  const max = Math.max(0.01, ...lines.map((r) => Math.max(r.a, r.b)));
+  for (const r of lines) {
+    const row = el("div", "topic"), pair = el("div", "pair");
+    for (const [f, v] of [["for-you", r.a], ["following", r.b]]) {
+      const track = el("div", "track"), fill = el("span", "fill");
+      fill.style.width = `${(v / max) * 100}%`;
+      fill.style.background = `var(--${FEEDVAR[f]})`;
+      fill.title = `${feedLabel(f)} ${pct1(v)}`;
+      track.append(fill);
+      pair.append(track);
+    }
+    const num = el("span", "num");
+    num.append(el("b", "", pct1(r.a)), ` / ${pct1(r.b)}`);
+    if (r.verdict === "higher" || r.verdict === "lower") num.append(el("div", r.verdict === "higher" ? "more" : "less", shzT(r.verdict === "higher" ? "topicMore" : "topicLess")));
+    row.append(el("span", "", shzT(`heat_${r.k}`)), pair, num);
+    rows.append(row);
+  }
+  // 目立つ投稿の中の、見下し・排除（2 つの feed を合わせて数える）
+  const hj = A.heatJudged + B.heatJudged, ha = A.heatAny + B.heatAny;
+  const oj = A.judged + B.judged - hj, oa = A.any + B.any - ha;
+  const hc = shzCompareCounts(ha, hj, oa, oj);
+  hostile.textContent = hc.verdict === "need" ? shzT("heatHostileNeed", { min: SHZ_MIN_N, a: hj, b: oj }) : shzT("heatHostile", { a: pct1(hc.a), b: pct1(hc.b) }) + shzT(`heatHostile_${hc.verdict}`);
+  age.textContent = shzT("heatAge", { a: ageText(A.age), b: ageText(B.age) });
+}
+
+function renderHero(t) {
+  renderHeadline(t);
+  renderGauges(t);
+  renderReady(t);
+}
+
 function renderTrend(recs) {
   const note = $("trendNote");
+  renderChart(recs);
+  renderTopics(recs);
+  renderHeat(recs);
   if (!Object.keys(recs).length) {
     note.textContent = shzT("trendEmpty");
     $("trendTable").hidden = $("dayTable").hidden = true;
+    renderHero(null);
     return;
   }
   renderDays(recs); // 日ごとの表は、直近 14 日の外の記録も含めて出す（最近の 14 日分）
@@ -131,8 +339,10 @@ function renderTrend(recs) {
   if (!SHZ_FEEDS.some((f) => t[f].seen)) {
     note.textContent = shzT("trendNone14");
     $("trendTable").hidden = true;
+    renderHero(null);
     return;
   }
+  renderHero(t);
   const versions = shzVersions(Object.fromEntries(Object.entries(recs).filter(([, r]) => r.ts >= from)));
   const legacy = SHZ_FEEDS.reduce((n, f) => n + t[f].legacy, 0);
   note.textContent = diffText(t) + (versions.length > 1 ? shzT("versions", { v: versions.join(", ") }) : "") + (legacy ? shzT("legacyNote", { n: legacy }) : "");
@@ -146,8 +356,10 @@ function renderSession(session, recs) {
   end.hidden = !active;
   table.hidden = true;
   diff.textContent = "";
+  $("sessBars").replaceChildren();
   if (!session) { prog.textContent = ""; return; }
   const { tally, done } = shzSessionProgress(recs, session);
+  if (active) for (const f of SHZ_FEEDS) $("sessBars").append(readyRow(feedLabel(f), tally[f].seen, session.targetEach)); // 集まり具合の棒
   const line = SHZ_FEEDS.map((f) => shzT("sessLine", { feed: feedLabel(f), seen: tally[f].seen, target: session.targetEach, judged: tally[f].judged })).join(" / ");
   if (active) {
     prog.textContent = shzT("sessRunning", { line, tail: shzT(done ? "sessDone" : "sessLook") });
@@ -174,6 +386,26 @@ async function render() {
   renderCount(recs);
   renderTrend(recs);
   renderSession(all.session ?? null, recs);
+  renderFoldToday(all.heatFoldDay);
+}
+
+// たたむ（D25）。設定と、今日たたんだ件数
+const foldOn = $("heatFoldEnabled"), foldRowdy = $("foldRowdy"), foldWide = $("foldWide");
+function showFoldSettings(v) {
+  foldOn.checked = v.heatFoldEnabled === true;
+  foldRowdy.checked = v.heatFoldRules?.rowdy !== false; // fold.js と同じ初期値（荒れているはオン、大きく広まったはオフ）
+  foldWide.checked = v.heatFoldRules?.wide === true;
+}
+chrome.storage.local.get({ heatFoldEnabled: false, heatFoldRules: null }, showFoldSettings);
+foldOn.addEventListener("change", async () => {
+  await chrome.storage.local.set({ heatFoldEnabled: foldOn.checked });
+  say(shzT(foldOn.checked ? "foldOnMsg" : "foldOffMsg"));
+});
+for (const box of [foldRowdy, foldWide]) box.addEventListener("change", () => chrome.storage.local.set({ heatFoldRules: { rowdy: foldRowdy.checked, wide: foldWide.checked } }));
+function renderFoldToday(v) {
+  const today = shzDay(Date.now());
+  const d = v?.d === today ? v : { n: 0, o: 0 };
+  $("foldToday").textContent = shzT("foldToday", { n: d.n || 0, o: d.o || 0 });
 }
 
 $("recDelete").addEventListener("click", async () => {
