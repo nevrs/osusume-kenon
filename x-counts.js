@@ -66,7 +66,7 @@ function shzPostAgeMin(article, nowMs = Date.now()) {
   return null;
 }
 
-// 「目立つ投稿」の見分け方（D25。基準は仮。実際の数でまだ確かめていない）
+// 「目立つ投稿」の見分け方（D25。基準は仮。荒れの線は D26 で引き直す予定）
 //   荒れ（rowdy）: 返信が SHZ_HEAT.replyMin 件以上あり、いいね以上。賛成より言い合い・反発が集まっている形
 //   大きく広まった（wide）: 表示が SHZ_HEAT.reach 以上
 const SHZ_HEAT = { replyMin: 20, reach: 100_000 };

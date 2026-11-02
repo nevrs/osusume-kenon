@@ -45,7 +45,7 @@ function shzShare(count, judged) {
   return judged >= SHZ_MIN_N ? count / judged : null;
 }
 
-const SHZ_GOOD_N = 200; // 判定済みがこれ以上あれば、比べるのに「十分」とする（敵意の投稿は数 % しかないので、差を読むには数百件要る。D20・D22）
+const SHZ_GOOD_N = 200; // 判定済みがこれ以上あれば、比べるのに「十分」とする（小さい割合の差を読むには数百件要る。D22）
 
 // 割合の 90% の幅（Wilson）。[下, 上]。judged が 0 なら null
 function shzInterval(count, judged, z = 1.645) {

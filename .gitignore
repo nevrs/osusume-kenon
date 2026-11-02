@@ -15,3 +15,6 @@ osusume-kenon-*.json
 *.records.json
 local-data/
 private/
+store-*.json
+newacct*.json
+*.tsv

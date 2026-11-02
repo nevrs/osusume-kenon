@@ -37,14 +37,14 @@ const show = (name, pred) => {
   const ci = (f) => { const [k, n] = t[f], c = shzInterval(k, n); return `${k}/${n} = ${pct(k / n)}（${c ? `${pct(c[0])}〜${pct(c[1])}` : "-"}）`; };
   console.log(`  ${name}: おすすめ ${ci("for-you")}・フォロー中 ${ci("following")} → ${v.verdict}${v.ratio ? `・倍率 ${v.ratio.toFixed(2)}` : ""}`);
 };
-// 返信が多めの形: 返信がいいねの 2% 以上で、返信 10 件以上（仮の線。D25 の荒れ（返信がいいね以上）は高すぎるため。DESIGN.md D26）
+// 返信が多めの形: 返信がいいねの 2% 以上で、返信 10 件以上（仮の線。D25 の荒れ（返信がいいね以上）は引き直す。DESIGN.md D26）
 const heavy = (r) => r.ct.r >= 10 && r.ct.r >= 0.02 * r.ct.l;
 console.log("\n## おすすめとフォロー中（すべての時間）");
 show("荒れ", (r) => shzRowdy(r.ct));
 show("返信が多め（いいねの 2% 以上・返信 10 件以上）", heavy);
 show("返信が多め（いいねの 5% 以上・返信 10 件以上）", (r) => r.ct.r >= 10 && r.ct.r >= 0.05 * r.ct.l);
 show("返信 50 件以上（投稿の大きさに引きずられる。比べる用）", (r) => r.ct.r >= 50);
-// おすすめの投稿は大きい（いいねが多い）ので、いいねの帯ごとに分けても差が残るかを見る
+// 投稿の大きさ（いいねの数）が feed で違うと、それだけで差が出るので、いいねの帯ごとに分けても差が残るかを見る
 console.log("\n## いいねの帯ごとの「返信が多め」");
 for (const [name, lo, hi] of [["いいね 100 未満", 0, 100], ["100〜1000", 100, 1000], ["1000〜1 万", 1000, 10000], ["1 万以上", 10000, Infinity]]) {
   const t = Object.fromEntries(Object.keys(FEEDS).map((f) => { const fr = withCt.filter((r) => r.feed === f && r.ct.l >= lo && r.ct.l < hi); return [f, `${fr.filter(heavy).length}/${fr.length}`]; }));
