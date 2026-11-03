@@ -277,18 +277,37 @@ const check = (name, ok, detail) => results.push(`${ok ? "OK" : "NG"}  ${name}${
   t = setup();
   await wait(300);
   check("温度: 記録が無いときは「まだ比べられません」で、共有のボタンは押せない", t.text("tempHeadline") === "まだ比べられません" && t.d.getElementById("shareX").disabled && t.d.getElementById("shareImg").disabled);
+  check("温度: 記録が無いときは「何件に 1 件」を出さず、先週との比べは件数の足りなさを書く", t.d.getElementById("tempPlain").hidden && t.text("tempWeek").includes("それぞれ 30 件以上") && t.text("tempWeek").includes("0 件・0 件"), t.text("tempWeek"));
   check("温度: 基準の日付と件数を、注に書く", t.text("tempFoot").includes("2026-11-01〜2026-11-02") && t.text("tempFoot").includes("460 件") && t.text("tempFoot").includes("押し上げた量ではありません"), t.text("tempFoot"));
   const HOT = { r: 30, p: 0, l: 100, b: 0, v: 3000 }, COLD = { r: 2, p: 0, l: 100, b: 0, v: 3000 };
   const temp = (prefix, feed, n, hot, extra = {}, t0 = now - 600_000) => { const o = {}; for (let i = 0; i < n; i++) o[`rec:${prefix}${i}`] = { feed, ts: t0 + i * 1000, ct: i < hot ? HOT : COLD, ...extra }; return o; };
   t = setup({ ...temp("fa", "for-you", 60, 30), ...temp("fb", "following", 40, 4) });
   await wait(400);
   check("温度: おすすめ 50% が基準（28%）よりはっきり高ければ「熱い」", t.text("tempHeadline").includes("学ぶ前の X より熱い") && t.text("tempSub").includes("おすすめ 50%") && t.text("tempSub").includes("学ぶ前の X 28%") && t.text("tempSub").includes("フォロー中 10%"), `${t.text("tempHeadline")} / ${t.text("tempSub")}`);
+  check("温度: おすすめ 50% を「およそ 2 件に 1 件」と言い換える", !t.d.getElementById("tempPlain").hidden && t.text("tempPlain").includes("およそ 2 件に 1 件"), t.text("tempPlain"));
+  check("温度: その前の 7 日の記録が無ければ、先週との比べは件数の足りなさを書く", t.text("tempWeek").includes("60 件・0 件"), t.text("tempWeek"));
   check("温度: 温度計は 3 本（おすすめ・学ぶ前の X・フォロー中）で、どれにも幅が付く", t.d.querySelectorAll("#tempGauges .gauge").length === 3 && t.d.querySelectorAll("#tempGauges .band").length === 3 && t.text("tempGauges").includes("学ぶ前の X"));
   check("温度: アカウントが 1 つ（不明だけ）なら、選び欄とアカウントどうしの行は出さない", t.d.getElementById("acctBar").hidden && t.d.getElementById("tempAccts").hidden && t.d.getElementById("recAcctDelete").hidden);
   t.click("shareX");
   await wait(50);
   const url = t.opened[0] || "";
   check("X で共有: X の投稿画面を開くだけで、文に温度・基準・ハッシュタグ・目安が入る", url.startsWith("https://x.com/intent/post?text=") && decodeURIComponent(url).includes("50%") && decodeURIComponent(url).includes("28%") && decodeURIComponent(url).includes("#タイムライン温度") && decodeURIComponent(url).includes("目安") && t.text("saved").includes("投稿するかは、あなたが決めて"), decodeURIComponent(url));
+  // 先週との比べ: この 7 日（50%）とその前の 7 日（10%）。7 日より前は 10 日前に置く
+  t = setup({ ...temp("wa", "for-you", 60, 30), ...temp("wb", "for-you", 60, 6, {}, now - 10 * 86_400_000) });
+  await wait(400);
+  check("先週との比べ: その前の 7 日より熱ければ「熱くなりました」と、前 → 今の割合", t.text("tempWeek").includes("熱くなりました") && t.text("tempWeek").includes("10% → 50%") && t.d.getElementById("tempWeek").classList.contains("higher"), t.text("tempWeek"));
+  t = setup({ ...temp("wa", "for-you", 60, 6), ...temp("wb", "for-you", 60, 30, {}, now - 10 * 86_400_000) });
+  await wait(400);
+  check("先週との比べ: 穏やかになれば「穏やかになりました」", t.text("tempWeek").includes("穏やかになりました") && t.text("tempWeek").includes("50% → 10%"), t.text("tempWeek"));
+  t = setup({ ...temp("wa", "for-you", 60, 15), ...temp("wb", "for-you", 60, 16, {}, now - 10 * 86_400_000) });
+  await wait(400);
+  check("先週との比べ: 差がぶれの内なら「はっきりした差はありません」・25% は「およそ 4 件に 1 件」", t.text("tempWeek").includes("はっきりした差はありません") && t.text("tempPlain").includes("およそ 4 件に 1 件"), `${t.text("tempWeek")} / ${t.text("tempPlain")}`);
+  t = setup(temp("wz", "for-you", 40, 0));
+  await wait(400);
+  check("温度: 返信が多めが 0 件なら「見当たりませんでした」", t.text("tempPlain").includes("見当たりませんでした"), t.text("tempPlain"));
+  t = setup(temp("wm", "for-you", 40, 32));
+  await wait(400);
+  check("温度: 8 割なら「大半」", t.text("tempPlain").includes("大半"), t.text("tempPlain"));
   // 1 回で 200 件見ても、始めの 150 件だけ数える（熱いのは 151 件目以降だけ → 0%）
   const deep = {};
   for (let i = 0; i < 200; i++) deep[`rec:d${i}`] = { feed: "for-you", ts: now - 600_000 + i * 1000, ct: i >= 150 ? HOT : COLD };

@@ -344,6 +344,23 @@ function tempRow(box, name, hot, n, color, max) {
   box.append(row);
 }
 
+// おすすめの温度を「およそ何件に 1 件」で言い換える（割合だけではピンと来ないので）
+function tempPlainText(a) {
+  if (!(a > 0)) return shzT("tempPlainNone");
+  const k = Math.round(1 / a);
+  return k <= 1 ? shzT("tempPlainMost") : shzT("tempPlain", { k });
+}
+// この 7 日と、その前の 7 日のおすすめの温度を比べる（記録は 14 日で消えるので、その中で比べる）
+function renderTempWeek(recs) {
+  const now = Date.now(), p = $("tempWeek");
+  const cur = shzTempTally(recs, now - 7 * DAY)["for-you"], prev = shzTempTally(recs, now - 14 * DAY, now - 7 * DAY - 1)["for-you"];
+  const c = shzCompareCounts(cur.hot, cur.n, prev.hot, prev.n);
+  p.className = `week ${c.verdict}`;
+  p.textContent = c.verdict === "need"
+    ? shzT("tempWeekNeed", { min: SHZ_MIN_N, a: cur.n, b: prev.n })
+    : shzT({ higher: "tempWeekUp", lower: "tempWeekDown", unclear: "tempWeekSame" }[c.verdict], { a: pct1(c.a), b: pct1(c.b) });
+}
+
 function renderTemp(recs, allRecs, accts) {
   const B = shzBaseline(), from = Date.now() - 14 * DAY;
   const t = shzTempTally(recs, from), A = t["for-you"], F = t.following;
@@ -354,6 +371,9 @@ function renderTemp(recs, allRecs, accts) {
   const c = shzCompareCounts(A.hot, A.n, B.hot, B.n);
   tempNow = c.verdict === "need" ? null : { a: c.a, b: c.b, n: A.n };
   $("shareX").disabled = $("shareImg").disabled = !tempNow;
+  $("tempPlain").hidden = !tempNow;
+  if (tempNow) $("tempPlain").textContent = tempPlainText(tempNow.a);
+  renderTempWeek(recs);
   if (c.verdict === "need") {
     h.textContent = shzT("tempNeed");
     sub.textContent = shzT("tempNeedSub", { min: SHZ_MIN_N, n: A.n });

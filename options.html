@@ -44,6 +44,11 @@
   .headline.higher { color: var(--fy); }
   .headline.lower { color: var(--fl); }
   .sub { font-size: 14px; margin: 2px 0 10px; }
+  .plain { font-size: 15px; margin: 6px 0 0; }
+  .week { font-size: 14px; margin: 0 0 10px; }
+  .week.higher { color: var(--fy); font-weight: 600; }
+  .week.lower { color: var(--fl); font-weight: 600; }
+  .week.need { color: var(--muted); font-size: 13px; font-weight: 400; }
   .gauge { display: grid; grid-template-columns: 84px 1fr 64px; gap: 10px; align-items: center; margin: 10px 0; }
   .gauge .name { font-weight: 600; font-size: 14px; }
   .gauge .val { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
@@ -117,7 +122,9 @@
 <section class="card" id="tempCard">
   <h2 data-i18n="tempH"></h2>
   <p class="headline" id="tempHeadline"></p>
+  <p class="plain" id="tempPlain" hidden></p>
   <p class="sub" id="tempSub"></p>
+  <p class="week" id="tempWeek"></p>
   <div id="tempGauges"></div>
   <div id="tempAccts" hidden>
     <p class="note" data-i18n="tempAcctH"></p>
