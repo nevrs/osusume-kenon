@@ -68,3 +68,21 @@ test("ID の印は同じ ID なら同じ、違う ID なら違い、元の ID �
   assert.match(a, /^[0-9a-f]{16}$/);
   assert.ok(!a.includes("2112399496"));
 });
+
+test("期限の片付けと「本文だけ消す」で、投稿者（au）も本文と一緒に消す。アカウント（acct）は残す（D27）", () => {
+  const recs = { "rec:a": { text: "x", au: "someone", acct: "me", feed: "for-you", ts: now - 15 * DAY, g: 0, c: 0, x: 0, jv: "ev1/c155" } };
+  const { strip } = shzPurgePlan(recs, now);
+  assert.deepEqual(strip["rec:a"], { acct: "me", feed: "for-you", ts: now - 15 * DAY, g: 0, c: 0, x: 0, jv: "ev1/c155" });
+  // 本文が先に消えていて、投稿者だけ残っている記録も片付ける
+  const only = shzPurgePlan({ "rec:b": { au: "someone", feed: "for-you", ts: now - 15 * DAY, g: 0, c: 0, x: 0, jv: "ev1/c155" } }, now);
+  assert.ok(!("au" in only.strip["rec:b"]));
+});
+
+test("@名として読める文字: 英数字と _ の 1〜15 文字（D27）", () => {
+  const { shzIsHandle } = require("../record-core.js");
+  assert.equal(shzIsHandle("abc_123"), true);
+  assert.equal(shzIsHandle("a".repeat(16)), false);
+  assert.equal(shzIsHandle("home"), true); // 形だけを見る（/home などは X_DOM の場所で避ける）
+  assert.equal(shzIsHandle("i/flow"), false);
+  assert.equal(shzIsHandle(""), false);
+});

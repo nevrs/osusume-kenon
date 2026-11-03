@@ -66,11 +66,14 @@ function shzPostAgeMin(article, nowMs = Date.now()) {
   return null;
 }
 
-// 「目立つ投稿」の見分け方（D25。基準は仮。荒れの線は D26 で引き直す予定）
-//   荒れ（rowdy）: 返信が SHZ_HEAT.replyMin 件以上あり、いいね以上。賛成より言い合い・反発が集まっている形
+// 「目立つ投稿」の見分け方（D25・D27）
+//   返信が多め（heavy）: 返信が SHZ_HEAT.replyMin 件以上あり、返信がいいねの line 倍以上（line は 0.03・0.1・1 の 3 段。D26 で引き直した荒れの線）。
+//     タイムライン温度（D27）は SHZ_TEMP_LINE（3%）で数える。数の行に出ない種類は 0 とみなす（英語の画面では、0 件の返信・いいねが文に出ない）
 //   大きく広まった（wide）: 表示が SHZ_HEAT.reach 以上
-const SHZ_HEAT = { replyMin: 20, reach: 100_000 };
-const shzRowdy = (ct) => !!ct && ct.r != null && ct.l != null && ct.r >= SHZ_HEAT.replyMin && ct.r >= ct.l;
+const SHZ_HEAT = { replyMin: 10, reach: 100_000 };
+const SHZ_TEMP_LINE = 0.03;
+const SHZ_FOLD_LINES = [0.03, 0.1, 1]; // たたむ線の 3 段（設定画面で選ぶ。初めは 3%）
+const shzHeavy = (ct, line = SHZ_TEMP_LINE) => !!ct && (ct.r ?? 0) >= SHZ_HEAT.replyMin && (ct.r ?? 0) >= line * (ct.l ?? 0);
 const shzWide = (ct) => !!ct && ct.v != null && ct.v >= SHZ_HEAT.reach;
 
-if (typeof module !== "undefined") module.exports = { parseCount, parseActionLabel, countsOf, shzPostCounts, shzPostAgeMin, SHZ_HEAT, shzRowdy, shzWide };
+if (typeof module !== "undefined") module.exports = { parseCount, parseActionLabel, countsOf, shzPostCounts, shzPostAgeMin, SHZ_HEAT, SHZ_TEMP_LINE, SHZ_FOLD_LINES, shzHeavy, shzWide };

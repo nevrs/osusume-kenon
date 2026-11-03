@@ -1,4 +1,4 @@
-// 「おすすめ」の目立つ投稿をたたむ（試験。DESIGN.md D25）。設定でオンにしたときだけ動く（初期値はオフ）。
+// 「おすすめ」の目立つ投稿をたたむ（試験。DESIGN.md D25・D27）。設定でオンにしたときだけ動く（初期値はオフ）。
 // 見分けるのは、投稿の下の数（返信・いいね・表示）だけ。AI を待たないので、投稿が出たその場でたたむ（D13 で外した、AI を待ってたたむ作りとは別）。
 // 札には、たたんだ理由（どの形の投稿か）だけを出し、本文・投稿者名は出さない。「開く」は本人が押す。X へは何も送らず、X のボタンも押さない。
 // 結果は記憶の中だけ。保存するのは「今日たたんだ件数・開いた件数」（heatFoldDay）だけで、本文・ID は保存しない。
@@ -9,14 +9,14 @@ const SHZ_HF_BOX = "shizume-fold-box";
 const SHZ_HF_STYLE = "shizume-fold-style";
 
 let shzHfOn = false;
-let shzHfRules = { rowdy: true, wide: false }; // どの形をたたむか（設定画面で選ぶ）
+let shzHfRules = { rowdy: true, wide: false, line: SHZ_FOLD_LINES[0] }; // どの形をたたむか（設定画面で選ぶ）。rowdy は「返信が多め」、line はその線（3 段。D27）
 let shzHfObserver = null;
 const shzHfWhy = new Map(); // 投稿の ID → たたむ理由（"rowdy" / "wide" / ""）。最初に見た時点の数で決め、あとで数が増えても変えない（読んでいる最中にたたまない）
 const shzHfOpened = new Set(); // 本人が「開く」を押した投稿の ID
 const shzHfCounted = new Set(); // 今日の件数に数えた投稿の ID
 
 function shzHfReason(ct) {
-  if (shzHfRules.rowdy && shzRowdy(ct)) return "rowdy";
+  if (shzHfRules.rowdy && shzHeavy(ct, shzHfRules.line)) return "rowdy";
   if (shzHfRules.wide && shzWide(ct)) return "wide";
   return "";
 }
@@ -30,6 +30,10 @@ function shzHfStyle() {
 .${SHZ_HF_BOX} button{flex:none;font-size:13px;color:inherit;background:none;border:1px solid currentColor;border-radius:999px;padding:2px 12px;cursor:pointer}`;
   document.head.appendChild(st);
 }
+
+// 札の理由の文。返信が多めは、いま選んでいる線を添える（「いいねの 3% 以上」など）
+const shzHfLineText = (line) => (line >= 1 ? shzT("foldLineLikes") : shzT("foldLinePct", { p: Math.round(line * 100) }));
+const shzHfWhyText = (why) => shzT(`foldWhy_${why}`, { line: shzHfLineText(shzHfRules.line) });
 
 function shzHfClear(article) {
   article.removeAttribute(SHZ_HF_ATTR);
@@ -57,7 +61,7 @@ function shzHfHide(article, id, why) {
   box.dataset.why = why;
   const label = document.createElement("span");
   label.className = `${SHZ_HF_BOX}-label`;
-  label.textContent = shzT(`foldWhy_${why}`);
+  label.textContent = shzHfWhyText(why);
   const btn = document.createElement("button");
   btn.type = "button";
   btn.textContent = shzT("foldOpen");
@@ -124,11 +128,11 @@ function shzHfStop() {
   document.getElementById(SHZ_HF_STYLE)?.remove();
 }
 
-const shzHfReadRules = (v) => ({ rowdy: v?.rowdy !== false, wide: v?.wide === true });
+const shzHfReadRules = (v) => ({ rowdy: v?.rowdy !== false, wide: v?.wide === true, line: SHZ_FOLD_LINES.includes(v?.line) ? v.line : SHZ_FOLD_LINES[0] });
 
 shzLoadLang(() => { // 言語が変わったら、出ている札の文も替える
   for (const b of document.querySelectorAll(`.${SHZ_HF_BOX}`)) {
-    b.querySelector(`.${SHZ_HF_BOX}-label`).textContent = shzT(`foldWhy_${b.dataset.why}`);
+    b.querySelector(`.${SHZ_HF_BOX}-label`).textContent = shzHfWhyText(b.dataset.why);
     b.querySelector("button").textContent = shzT("foldOpen");
   }
 });

@@ -15,7 +15,8 @@ const article = (id, text, extra = "") => `<article data-testid="tweet">
   <div role="group" aria-label="1 件の返信、2 件のいいね"></div>
 </article>`;
 
-const page = (tab) => `<body>
+const page = (tab, acct) => `<body>
+  ${acct ? `<nav><a data-testid="AppTabBar_Profile_Link" href="/${acct}">プロフィール</a></nav>` : ""}
   <div role="tablist"><div role="tab" aria-selected="${tab === "おすすめ"}">おすすめ</div><div role="tab" aria-selected="${tab === "フォロー中"}">フォロー中</div></div>
   <div id="tl">
     ${article("111", "怒っている投稿です")}
@@ -28,8 +29,8 @@ const page = (tab) => `<body>
   </div>
 </body>`;
 
-function setup({ url = "https://x.com/home", tab = "おすすめ", stored = {}, enabled = false } = {}) {
-  const dom = new JSDOM(page(tab), { url, runScripts: "outside-only", pretendToBeVisual: true });
+function setup({ url = "https://x.com/home", tab = "おすすめ", stored = {}, enabled = false, acct = null } = {}) {
+  const dom = new JSDOM(page(tab, acct), { url, runScripts: "outside-only", pretendToBeVisual: true });
   const w = dom.window;
   const store = { ...stored };
   const writes = {}; // キーごとの書き込み回数
@@ -92,7 +93,8 @@ const check = (name, ok) => results.push(`${ok ? "OK" : "NG"}  ${name}`);
   const r = t.recs();
   const get = (id) => r[`rec:${hashOf(id)}`];
   check("見えていた投稿の本文・おすすめ・時刻を残す", get("111")?.text === "怒っている投稿です" && get("111")?.feed === "for-you" && typeof get("111")?.ts === "number");
-  check("残す項目は本文・feed・時刻・反応の数・投稿からの分だけ（投稿者名・リンク・元の ID を残さない）", JSON.stringify(Object.keys(get("111")).sort()) === '["age","ct","feed","text","ts"]' && !JSON.stringify(r).includes("someone") && !JSON.stringify(r).includes("status") && !Object.keys(r).some((k) => k.includes("111")));
+  check("残す項目は本文・feed・時刻・反応の数・投稿からの分・投稿者の @名だけ（表示名・リンク・元の ID を残さない。アカウントが読めなければ acct は無し）", JSON.stringify(Object.keys(get("111")).sort()) === '["age","au","ct","feed","text","ts"]' && get("111").au === "someone" && !JSON.stringify(r).includes("名前") && !JSON.stringify(r).includes("status") && !Object.keys(r).some((k) => k.includes("111")));
+  check("表示名だけでリンクの無い投稿者は、au を残さない", get("777") && !("au" in get("777")));
   check("反応の数を残す（日本語の画面では、文に無い種類は 0）（D25）", JSON.stringify(get("111")?.ct) === '{"r":1,"p":0,"l":2,"b":0,"v":0}');
   check("投稿からの分は、引用の外の日時から数える（D25）", Math.abs(get("222")?.age - (Date.now() - Date.parse("2026-10-21T00:00:00Z")) / 60_000) < 2);
   check("引用の投稿は、自分の本文だけを残す（引用元の本文は残さない）", get("222")?.text === "自分の本文" && !JSON.stringify(r).includes("引用元の本文"));
@@ -228,6 +230,24 @@ const check = (name, ok) => results.push(`${ok ? "OK" : "NG"}  ${name}`);
   t.fire({ textClearedAt: { newValue: t.store.textClearedAt } });
   await wait(600);
   check("保存の読み出しを待つ間に「本文だけ消す」が来たら、その保存を捨てる", Object.keys(t.recs()).length === 0);
+
+  // アカウント（D27）: ログイン中の @名を記録に付け、アカウントごとに別の記録にする。最後に見たアカウントを覚える
+  t = setup({ enabled: true, acct: "me_1", stored: { [`rec:${hashOf("111")}`]: { text: "前の版で残した記録", feed: "for-you", ts: Date.now() - DAY } } });
+  await wait(150);
+  t.see("111"); t.see("222");
+  await wait(5300);
+  const ka = `rec:${hashOf("111@me_1")}`;
+  check("ログイン中のアカウントの @名（acct）を記録に付ける", t.store[ka]?.acct === "me_1" && t.store[ka]?.text === "怒っている投稿です");
+  check("同じ投稿でも、前の版（アカウント無し）の記録とは別の記録にする", t.store[`rec:${hashOf("111")}`]?.text === "前の版で残した記録");
+  check("最後に見たアカウントを覚える（acctLast）", t.store.acctLast === "me_1");
+  t.see("555"); await wait(1300);
+  t.store.acctClearedAt = { acct: "me_1", at: Date.now() };
+  t.fire({ acctClearedAt: { newValue: t.store.acctClearedAt } });
+  for (const k of Object.keys(t.store)) if (k.startsWith("rec:") && t.store[k].acct === "me_1") delete t.store[k];
+  await wait(4500);
+  check("「このアカウントの記録を消す」のあと、保存待ちが書き戻されない", !Object.values(t.recs()).some((x) => x.acct === "me_1"));
+  t.see("111"); await wait(5300);
+  check("消したあとで同じ投稿をまた見たら、記録できる", t.store[ka]?.acct === "me_1");
 
   console.log(results.join("\n"));
   process.exit(results.some((x) => x.startsWith("NG")) ? 1 : 0);

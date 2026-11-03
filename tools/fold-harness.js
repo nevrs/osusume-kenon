@@ -16,6 +16,7 @@ const article = (id, label, extra = "") => `<article data-testid="tweet">
 const ROWDY = "80 件の返信、3 件のリポスト、40 件のいいね、5000 件の表示"; // 返信がいいねより多い
 const WIDE = "5 件の返信、900 件のリポスト、8000 件のいいね、300000 件の表示"; // 表示 30 万
 const CALM = "2 件の返信、10 件のいいね、800 件の表示";
+const MID = "30 件の返信、500 件のいいね、9000 件の表示"; // 返信がいいねの 6%（3% の線ではたたみ、10% の線ではたたまない）
 const page = (tab, body) => `<body>
   <div role="tablist"><div role="tab" aria-selected="${tab === "おすすめ"}">おすすめ</div><div role="tab" aria-selected="${tab === "フォロー中"}">フォロー中</div></div>
   <div id="tl">${body}</div>
@@ -60,13 +61,13 @@ const check = (name, ok) => results.push(`${ok ? "OK" : "NG"}  ${name}`);
 
   t = setup({ enabled: true });
   await wait(50);
-  check("荒れている投稿（返信がいいね以上）をたたむ", t.st("1") === "folded" && !!t.art("1").querySelector(".shizume-fold-box"));
+  check("返信が多めの投稿（初めの線: 返信 10 件以上で、いいねの 3% 以上）をたたむ", t.st("1") === "folded" && !!t.art("1").querySelector(".shizume-fold-box"));
   check("大きく広まった投稿は、初期値ではたたまない", t.st("2") === "open");
   check("ふつうの投稿はたたまない", t.st("3") === "open");
   check("広告は触らない", t.st("4") == null);
   check("数の行が無い投稿は触らない（あとでもう一度見る）", t.st("5") == null);
   const box = t.art("1").querySelector(".shizume-fold-box");
-  check("札には理由だけを出し、本文・投稿者名を出さない", /言い合い/.test(box.textContent) && !/本文|名前|someone/.test(box.textContent));
+  check("札には理由（と線）だけを出し、本文・投稿者名を出さない", /返信が多い.*3%/.test(box.textContent) && !/本文|名前|someone/.test(box.textContent));
   check("今日たたんだ件数を数える", t.store.heatFoldDay?.n === 1 && t.store.heatFoldDay?.o === 0);
   // X が数の行をあとから入れた
   t.art("5").insertAdjacentHTML("beforeend", `<div role="group" aria-label="${ROWDY}"></div>`);
@@ -109,7 +110,7 @@ const check = (name, ok) => results.push(`${ok ? "OK" : "NG"}  ${name}`);
   // たたむ形を変える
   t.fire({ heatFoldRules: { rowdy: false, wide: true } });
   await wait(20);
-  check("形を変えたら当て直す（大きく広まった投稿をたたみ、荒れている投稿は戻す）", t.st("2") === "folded" && t.st("5") === "open");
+  check("形を変えたら当て直す（大きく広まった投稿をたたみ、返信が多めの投稿は戻す）", t.st("2") === "folded" && t.st("5") === "open");
   check("札の理由は、広まった形の文", /広まった/.test(t.art("2").querySelector(".shizume-fold-box").textContent));
 
   // 言語
@@ -124,6 +125,20 @@ const check = (name, ok) => results.push(`${ok ? "OK" : "NG"}  ${name}`);
   t.fire({ heatFoldEnabled: true });
   await wait(20);
   check("オンに戻したら、またたたむ", t.st("2") === "folded");
+
+  // たたむ線の 3 段（D27）
+  t = setup({ enabled: true, body: [article("1", ROWDY), article("2", MID), article("3", CALM)].join("") });
+  await wait(50);
+  check("線 3%（初め）: 返信がいいねの 6% の投稿もたたむ", t.st("1") === "folded" && t.st("2") === "folded" && t.st("3") === "open");
+  t.fire({ heatFoldRules: { rowdy: true, wide: false, line: 0.1 } });
+  await wait(20);
+  check("線 10%: 6% の投稿は戻し、返信がいいね以上の投稿はたたんだまま。札の文は 10%", t.st("2") === "open" && t.st("1") === "folded" && /10%/.test(t.art("1").querySelector(".shizume-fold-box").textContent));
+  t.fire({ heatFoldRules: { rowdy: true, wide: false, line: 1 } });
+  await wait(20);
+  check("線 いいね以上: 札の文は「返信がいいね以上」", t.st("1") === "folded" && /返信がいいね以上/.test(t.art("1").querySelector(".shizume-fold-box").textContent));
+  t.fire({ heatFoldRules: { rowdy: true, wide: false, line: 0.5 } });
+  await wait(20);
+  check("3 段にない線は、初めの 3% として読む", t.st("2") === "folded");
 
   // フォロー中では触らない
   t = setup({ tab: "フォロー中", enabled: true });

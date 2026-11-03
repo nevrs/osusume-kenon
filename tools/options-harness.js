@@ -27,10 +27,12 @@ function setup(stored = {}) {
     },
     onChanged: { addListener: (f) => listeners.push(f) },
   } };
-  w.eval(["i18n.js", "x-counts.js", "record-core.js", "stats-core.js", "options.js"].map((f) => fs.readFileSync(path.join(repo, f), "utf8")).join(";\n"));
+  const opened = []; // X で共有で開いた URL（D27）
+  w.open = (url) => { opened.push(url); return null; };
+  w.eval(["i18n.js", "x-counts.js", "record-core.js", "stats-core.js", "baseline.js", "options.js"].map((f) => fs.readFileSync(path.join(repo, f), "utf8")).join(";\n"));
   const d = w.document;
   const text = (id) => d.getElementById(id).textContent;
-  return { w, d, store, text, click: (id) => d.getElementById(id).click() };
+  return { w, d, store, text, opened, click: (id) => d.getElementById(id).click() };
 }
 
 // 今の問い（D15）で判定済みの記録。hit なら「ひとまとめの見下し」に当てはまる（集団の言葉と見下しの両方。D18）。そうでなければ集団の言葉だけ（数えない）
@@ -102,19 +104,27 @@ const check = (name, ok, detail) => results.push(`${ok ? "OK" : "NG"}  ${name}${
   check("目立つ投稿: はっきり多ければ見出しにそう書き、割合と行ごとの印を出す", t.text("heatHeadline").includes("目立つ投稿が多く") && t.text("heatSub").includes("おすすめ 30%") && t.text("heatSub").includes("フォロー中 5.0%") && t.d.querySelectorAll("#heatRows .topic").length === 3 && t.text("heatRows").includes("おすすめで多い"), `${t.text("heatHeadline")} / ${t.text("heatSub")} / ${t.text("heatRows")}`);
   check("目立つ投稿の中の見下し・排除は、件数が足りなければ理由を出す", t.text("heatHostile").includes("14 件・66 件"), t.text("heatHostile"));
   check("投稿からの時間の中ほどを出す", t.text("heatAge").includes("5 時間") && t.text("heatAge").includes("30 分"), t.text("heatAge"));
-  check("基準の説明に数を入れる", t.text("heatRowsNote").includes("20 件以上") && t.text("heatRowsNote").includes("100,000"), t.text("heatRowsNote"));
+  check("基準の説明に数を入れる", t.text("heatRowsNote").includes("10 件以上") && t.text("heatRowsNote").includes("100,000"), t.text("heatRowsNote"));
   t = setup({ ...many("a", "for-you", 40, 20) });
   await wait(400);
   check("数の記録が無ければ、目立つ投稿は「まだ比べられません」", t.text("heatHeadline") === "まだ比べられません" && t.text("heatSub").includes("0.15.0"));
   // たたむ設定
   t = setup({ heatFoldDay: { d: shzDayOf(now), n: 4, o: 1 } });
   await wait(400);
-  check("たたむ: 初期値はオフ、荒れているはオン、広まったはオフ", !t.d.getElementById("heatFoldEnabled").checked && t.d.getElementById("foldRowdy").checked && !t.d.getElementById("foldWide").checked);
+  check("たたむ: 初期値はオフ、返信が多めはオン（線は 3%）、広まったはオフ", !t.d.getElementById("heatFoldEnabled").checked && t.d.getElementById("foldRowdy").checked && t.d.getElementById("foldLine").value === "0.03" && !t.d.getElementById("foldWide").checked);
   check("今日たたんだ件数と開いた件数を出す", t.text("foldToday").includes("4 件") && t.text("foldToday").includes("1 件"), t.text("foldToday"));
   t.click("heatFoldEnabled");
   t.click("foldWide");
   await wait(50);
-  check("たたむのオン・形の選び方を保存する", t.store.heatFoldEnabled === true && t.store.heatFoldRules?.wide === true && t.store.heatFoldRules?.rowdy === true);
+  check("たたむのオン・形の選び方を保存する", t.store.heatFoldEnabled === true && t.store.heatFoldRules?.wide === true && t.store.heatFoldRules?.rowdy === true && t.store.heatFoldRules?.line === 0.03);
+  const fl = t.d.getElementById("foldLine");
+  fl.value = "0.1";
+  fl.dispatchEvent(new t.w.Event("change"));
+  await wait(50);
+  check("たたむ線を 10% に替えると保存する（D27）", t.store.heatFoldRules?.line === 0.1 && t.store.heatFoldRules?.rowdy === true);
+  t = setup({ heatFoldRules: { rowdy: true, wide: false, line: 1 } });
+  await wait(300);
+  check("保存したたたむ線（いいね以上）を選んだ状態で開く", t.d.getElementById("foldLine").value === "1");
 
   // 判定の版の混在
   t = setup({ ...many("a", "for-you", 40, 20), "rec:x": J("for-you", now, true, { jv: "group2/c156" }) });
@@ -262,6 +272,57 @@ const check = (name, ok, detail) => results.push(`${ok ? "OK" : "NG"}  ${name}${
   t.click("recExport");
   await wait(100);
   check("書き出せる本文が無いときは、そう知らせる", t.text("saved").includes("書き出せる本文がありません"));
+
+  // タイムライン温度（D27）: おすすめ・学ぶ前の X・フォロー中の 3 本。各回の始めの 150 件
+  t = setup();
+  await wait(300);
+  check("温度: 記録が無いときは「まだ比べられません」で、共有のボタンは押せない", t.text("tempHeadline") === "まだ比べられません" && t.d.getElementById("shareX").disabled && t.d.getElementById("shareImg").disabled);
+  check("温度: 基準の日付と件数を、注に書く", t.text("tempFoot").includes("2026-11-01〜2026-11-02") && t.text("tempFoot").includes("460 件") && t.text("tempFoot").includes("押し上げた量ではありません"), t.text("tempFoot"));
+  const HOT = { r: 30, p: 0, l: 100, b: 0, v: 3000 }, COLD = { r: 2, p: 0, l: 100, b: 0, v: 3000 };
+  const temp = (prefix, feed, n, hot, extra = {}, t0 = now - 600_000) => { const o = {}; for (let i = 0; i < n; i++) o[`rec:${prefix}${i}`] = { feed, ts: t0 + i * 1000, ct: i < hot ? HOT : COLD, ...extra }; return o; };
+  t = setup({ ...temp("fa", "for-you", 60, 30), ...temp("fb", "following", 40, 4) });
+  await wait(400);
+  check("温度: おすすめ 50% が基準（28%）よりはっきり高ければ「熱い」", t.text("tempHeadline").includes("学ぶ前の X より熱い") && t.text("tempSub").includes("おすすめ 50%") && t.text("tempSub").includes("学ぶ前の X 28%") && t.text("tempSub").includes("フォロー中 10%"), `${t.text("tempHeadline")} / ${t.text("tempSub")}`);
+  check("温度: 温度計は 3 本（おすすめ・学ぶ前の X・フォロー中）で、どれにも幅が付く", t.d.querySelectorAll("#tempGauges .gauge").length === 3 && t.d.querySelectorAll("#tempGauges .band").length === 3 && t.text("tempGauges").includes("学ぶ前の X"));
+  check("温度: アカウントが 1 つ（不明だけ）なら、選び欄とアカウントどうしの行は出さない", t.d.getElementById("acctBar").hidden && t.d.getElementById("tempAccts").hidden && t.d.getElementById("recAcctDelete").hidden);
+  t.click("shareX");
+  await wait(50);
+  const url = t.opened[0] || "";
+  check("X で共有: X の投稿画面を開くだけで、文に温度・基準・ハッシュタグ・目安が入る", url.startsWith("https://x.com/intent/post?text=") && decodeURIComponent(url).includes("50%") && decodeURIComponent(url).includes("28%") && decodeURIComponent(url).includes("#タイムライン温度") && decodeURIComponent(url).includes("目安") && t.text("saved").includes("投稿するかは、あなたが決めて"), decodeURIComponent(url));
+  // 1 回で 200 件見ても、始めの 150 件だけ数える（熱いのは 151 件目以降だけ → 0%）
+  const deep = {};
+  for (let i = 0; i < 200; i++) deep[`rec:d${i}`] = { feed: "for-you", ts: now - 600_000 + i * 1000, ct: i >= 150 ? HOT : COLD };
+  t = setup(deep);
+  await wait(400);
+  check("温度: 各回の始めの 150 件だけを数える", t.text("tempSub").includes("おすすめ 0%") && t.text("tempGauges").includes("150 件"), t.text("tempSub"));
+
+  // アカウント（D27）: 2 つ以上あれば選び欄を出し、最後に X で見たアカウントを初めに選ぶ。下の欄もそのアカウントで数える
+  const two = { ...temp("aa", "for-you", 60, 30, { acct: "acct_a", au: "writer1", text: "本文A" }), ...temp("bb", "for-you", 60, 3, { acct: "acct_b", text: "本文B" }), ...temp("nn", "following", 5, 0), acctLast: "acct_b" };
+  t = setup(two);
+  await wait(400);
+  const sel = t.d.getElementById("acctSel");
+  check("アカウント: 2 つ以上あれば選び欄を出し、最後に見たアカウントを選ぶ", !t.d.getElementById("acctBar").hidden && sel.options.length === 3 && sel.value === "acct_b" && t.text("acctSel").includes("アカウント不明"), `${sel.value} / ${t.text("acctSel")}`);
+  check("アカウント: 選んだアカウントのおすすめで温度を出す（5% → 穏やか）", t.text("tempHeadline").includes("穏やか") && t.text("tempSub").includes("おすすめ 5.0%"), `${t.text("tempHeadline")} / ${t.text("tempSub")}`);
+  check("アカウントどうしの行（おすすめの温度）を出す", !t.d.getElementById("tempAccts").hidden && t.text("tempAcctRows").includes("@acct_a") && t.text("tempAcctRows").includes("@acct_b") && t.text("tempAcctRows").includes("50%"), t.text("tempAcctRows"));
+  check("記録の件数は、すべてのアカウントを合わせて出す", t.text("recCount").includes("125 件"));
+  sel.value = "acct_a";
+  sel.dispatchEvent(new t.w.Event("change"));
+  await wait(300);
+  check("アカウントを切り替えると、温度もそのアカウントで数え直す", t.text("tempHeadline").includes("熱い") && t.text("recAcctDelete").includes("@acct_a"));
+  t.d.getElementById("sampleBox").open = true;
+  t.w.shzSample = (recs) => Object.values(recs).filter((r) => r.text).slice(0, 2).map((r) => ({ ...r, g: 0, c: 0, x: 0, jv: "ev1/c155" })); // 見本は判定済みが要るので、ここでは選び方を差し替えて表示だけを見る
+  t.click("sampleMore");
+  await wait(100);
+  check("見本: 選んだアカウントの記録だけを出し、投稿者の @名を添える", t.text("sampleList").includes("本文A") && !t.text("sampleList").includes("本文B") && t.text("sampleList").includes("@writer1"), t.text("sampleList").slice(0, 200));
+  let clip2 = null;
+  Object.defineProperty(t.w, "navigator", { value: { clipboard: { writeText: async (s) => { clip2 = s; } }, userAgent: "" }, configurable: true });
+  t.click("sampleCopy");
+  await wait(50);
+  check("見本のコピーには、投稿者の @名を入れない", clip2 && clip2.includes("本文A") && !clip2.includes("writer1"), clip2);
+  t.click("recAcctDelete");
+  await wait(300);
+  const kept = Object.values(t.store).filter((r) => r && r.feed);
+  check("「このアカウントの記録を消す」は、そのアカウントの記録だけを消し、開いている X のタブに伝える", !kept.some((r) => r.acct === "acct_a") && kept.some((r) => r.acct === "acct_b") && kept.some((r) => !r.acct) && t.store.acctClearedAt?.acct === "acct_a" && t.text("saved").includes("@acct_a の記録を消しました"));
 
   // 画面の組み立てに innerHTML を使っていない（本文のような外の文字が入る場所は無いが、決まりとして確かめる）
   const src = fs.readFileSync(path.join(repo, "options.js"), "utf8");

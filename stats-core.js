@@ -1,8 +1,8 @@
 // 判定済みの記録を数える（画面に触れない。設定画面とテストが使う）。
 // 数えるのは今の問い（D15）の答え: ひとまとめの見下し（集団の言葉 g と見下し c の両方。D18）・見下し（c）・排除（x）。どれかに当てはまれば any。前の問い（怒り・敵意の点、版 group1 の答え。D16）の記録は legacy として件数だけ数える
 
-// ブラウザでは x-counts.js・record-core.js が先に読まれていて、shzRowdy・shzWide・shzIsJudged・shzDay が使える。テスト（node）ではここで読み込む
-if (typeof module !== "undefined") { const k = require("./x-counts.js"); globalThis.shzRowdy = k.shzRowdy; globalThis.shzWide = k.shzWide; const c = require("./record-core.js"); globalThis.shzIsJudged = c.shzIsJudged; globalThis.shzIsLegacy = c.shzIsLegacy; globalThis.shzDay = c.shzDay; globalThis.shzLumpHit = c.shzLumpHit; globalThis.shzAnyHit = c.shzAnyHit; }
+// ブラウザでは x-counts.js・record-core.js が先に読まれていて、shzHeavy・shzWide・shzIsJudged・shzDay が使える。テスト（node）ではここで読み込む
+if (typeof module !== "undefined") { const k = require("./x-counts.js"); globalThis.shzHeavy = k.shzHeavy; globalThis.shzWide = k.shzWide; const c = require("./record-core.js"); globalThis.shzIsJudged = c.shzIsJudged; globalThis.shzIsLegacy = c.shzIsLegacy; globalThis.shzDay = c.shzDay; globalThis.shzLumpHit = c.shzLumpHit; globalThis.shzAnyHit = c.shzAnyHit; }
 
 const SHZ_MIN_N = 30; // これより少ない判定済み件数の割合は、参考にしない
 
@@ -116,19 +116,55 @@ function shzTopicOverlap(tt, sims = 400) {
   return { overlap, rows, base: null_[Math.floor(sims / 2)], lo, same: overlap >= lo };
 }
 
+// ---- アカウント（D27） ----
+// どのアカウントで見た記録か。0.16.0 より前の記録には無い（null。設定画面では「アカウント不明」）
+const shzAcctOf = (r) => (typeof r.acct === "string" ? r.acct : null);
+// 記録のあるアカウントと件数。多い順、不明（null）は最後
+function shzAccounts(records) {
+  const n = new Map();
+  for (const r of Object.values(records)) { const a = shzAcctOf(r); n.set(a, (n.get(a) || 0) + 1); }
+  return [...n].map(([acct, count]) => ({ acct, count })).sort((x, y) => (x.acct === null) - (y.acct === null) || y.count - x.count);
+}
+// そのアカウントの記録だけ（キーごと）
+function shzOfAcct(records, acct) {
+  return Object.fromEntries(Object.entries(records).filter(([, r]) => shzAcctOf(r) === acct));
+}
+
+// ---- タイムライン温度（D27。反応の形だけで数える。AI は使わない） ----
+// 「回」: 同じ feed の記録の時刻が SHZ_RUN_GAP_MS 以上空いたら、別の回（開き直したあと）とみなす。基準（baseline.js）と同じ数え方
+const SHZ_RUN_GAP_MS = 3 * 60_000;
+const SHZ_RUN_FIRST = 150; // 各回の始めの何件で比べるか（上のほうほど「返信が多め」が多いので、件数をそろえる。research/ragebait-record.md）
+// 期間 [fromTs, toTs] の、反応の数（ct）を読めた記録を feed ごとに、各回の始めの first 件だけ数える。{ "for-you": { n, hot, runs }, following: {...} }
+// hot = 返信が多め（line。初めは SHZ_TEMP_LINE の 3%）
+function shzTempTally(records, fromTs = 0, toTs = Infinity, { first = SHZ_RUN_FIRST, gapMs = SHZ_RUN_GAP_MS, line } = {}) {
+  const out = Object.fromEntries(SHZ_FEEDS.map((f) => [f, { n: 0, hot: 0, runs: 0 }]));
+  for (const f of SHZ_FEEDS) {
+    const rs = Object.values(records).filter((r) => r.feed === f && r.ct && typeof r.ts === "number" && r.ts >= fromTs && r.ts <= toTs).sort((a, b) => a.ts - b.ts);
+    let prev = -Infinity, k = 0;
+    for (const r of rs) {
+      if (r.ts - prev >= gapMs) { out[f].runs++; k = 0; }
+      prev = r.ts;
+      if (k++ >= first) continue;
+      out[f].n++;
+      if (shzHeavy(r.ct, line)) out[f].hot++;
+    }
+  }
+  return out;
+}
+
 // ---- 目立つ投稿（D25。X が前に出す投稿の形を見るための目安） ----
 // 期間 [fromTs, toTs] の、反応の数（ct）を読めた記録を feed ごとに数える。
-//   n: 数を読めた件数、rowdy: 荒れ（返信がいいね以上）、wide: 大きく広まった（表示 10 万以上）、heat: どちらか、age: 投稿からの分の中ほど（見た時点）
+//   n: 数を読めた件数、heavy: 返信が多め（タイムライン温度と同じ 3% の線。D27）、wide: 大きく広まった（表示 10 万以上）、heat: どちらか、age: 投稿からの分の中ほど（見た時点）
 //   judged / any: そのうち見下し・排除を判定済みの件数・当てはまった件数。heatJudged / heatAny: 目立つ投稿の中での同じ数
 function shzHeatTally(records, fromTs = 0, toTs = Infinity) {
-  const out = Object.fromEntries(SHZ_FEEDS.map((f) => [f, { n: 0, rowdy: 0, wide: 0, heat: 0, age: null, judged: 0, any: 0, heatJudged: 0, heatAny: 0 }]));
+  const out = Object.fromEntries(SHZ_FEEDS.map((f) => [f, { n: 0, heavy: 0, wide: 0, heat: 0, age: null, judged: 0, any: 0, heatJudged: 0, heatAny: 0 }]));
   const ages = Object.fromEntries(SHZ_FEEDS.map((f) => [f, []]));
   for (const r of Object.values(records)) {
     const t = out[r.feed];
     if (!t || !r.ct || !(r.ts >= fromTs && r.ts <= toTs)) continue;
     t.n++;
-    const ro = shzRowdy(r.ct), wi = shzWide(r.ct), heat = ro || wi;
-    if (ro) t.rowdy++;
+    const hv = shzHeavy(r.ct), wi = shzWide(r.ct), heat = hv || wi;
+    if (hv) t.heavy++;
     if (wi) t.wide++;
     if (heat) t.heat++;
     if (typeof r.age === "number") ages[r.feed].push(r.age);
@@ -162,16 +198,17 @@ function shzSample(records, { n = 10, hitOnly = false, fromTs = 0, rand = Math.r
   const half = Math.ceil(n / 2);
   const pick = [...by["for-you"].slice(0, half), ...by.following.slice(0, n - half)];
   const rest = shuffle([...by["for-you"].slice(half), ...by.following.slice(n - half)]);
-  return shuffle([...pick, ...rest.slice(0, n - pick.length)]).map(({ text, feed, ts, g, c, x, jv }) => ({ text, feed, ts, g, c, x, jv }));
+  return shuffle([...pick, ...rest.slice(0, n - pick.length)]).map(({ text, feed, ts, g, c, x, jv, au }) => ({ text, feed, ts, g, c, x, jv, ...(au ? { au } : {}) })); // 投稿者は見本の表示にだけ使う（コピーには入れない。D27）
 }
 
 // 書き出し（本人がボタンを押したときだけ）。本文の残っている記録を、古い順に。投稿の印（ID から作った文字列）と時刻は入れず、日付だけ。
+// どのアカウントで見たか（acct）は入れ、投稿者（au）は入れない（D27）。
 // 判定は今の版で判定済みのものだけ付ける（前の版の答えは数えないので、書き出しでも混ぜない）
 function shzExportRows(records) {
   return Object.values(records)
     .filter((r) => r.text && typeof r.ts === "number")
     .sort((a, b) => a.ts - b.ts)
-    .map((r) => ({ feed: r.feed, day: shzDay(r.ts), text: r.text, ...(r.auto ? { auto: 1 } : {}), ...(shzIsJudged(r) ? { g: r.g, c: r.c, x: r.x, jv: r.jv } : {}), ...(typeof r.tp === "string" ? { tp: r.tp, tv: r.tv } : {}), ...(r.ct ? { ct: r.ct } : {}), ...(typeof r.age === "number" ? { age: r.age } : {}) }));
+    .map((r) => ({ feed: r.feed, day: shzDay(r.ts), text: r.text, ...(shzAcctOf(r) ? { acct: r.acct } : {}), ...(r.auto ? { auto: 1 } : {}), ...(shzIsJudged(r) ? { g: r.g, c: r.c, x: r.x, jv: r.jv } : {}), ...(typeof r.tp === "string" ? { tp: r.tp, tv: r.tv } : {}), ...(r.ct ? { ct: r.ct } : {}), ...(typeof r.age === "number" ? { age: r.age } : {}) }));
 }
 
-if (typeof module !== "undefined") module.exports = { SHZ_MIN_N, SHZ_GOOD_N, SHZ_TOPIC_MIN, SHZ_FEEDS, shzInterval, shzCompare, shzCompareCounts, shzHeatTally, shzTopicTally, shzTopicOverlap, shzTally, shzTallyByDay, shzShare, shzVersions, shzSessionProgress, shzSample, shzExportRows };
+if (typeof module !== "undefined") module.exports = { shzAcctOf, shzAccounts, shzOfAcct, SHZ_RUN_GAP_MS, SHZ_RUN_FIRST, shzTempTally, SHZ_MIN_N, SHZ_GOOD_N, SHZ_TOPIC_MIN, SHZ_FEEDS, shzInterval, shzCompare, shzCompareCounts, shzHeatTally, shzTopicTally, shzTopicOverlap, shzTally, shzTallyByDay, shzShare, shzVersions, shzSessionProgress, shzSample, shzExportRows };

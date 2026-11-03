@@ -1,7 +1,8 @@
 // 「おすすめ」で見せられた投稿の記録（DESIGN.md D9）。設定でオンにしたときだけ動く（初期値はオフ）。
 // 画面に 0.5 秒以上出ていた投稿の本文を、端末の中（chrome.storage.local）に残す。X へは何も送らず、X の画面を動かさない（スクロールもしない）。
-// 残すもの: 印（元の ID から作った短い文字列。重複を見分けるためのもの）・本文・おすすめ/フォロー中の別・時刻・反応の数と投稿からの分（D25）。
-// 投稿者名の欄・リンクの欄は残さない（ただし本文に入っている @アカウント名や URL はそのまま残る）。古い記録は自動で消す。
+// 残すもの: 印（元の ID から作った短い文字列。重複を見分けるためのもの）・本文・おすすめ/フォロー中の別・時刻・反応の数と投稿からの分（D25）・
+// どのアカウント（ログイン中の @名）で見たか（acct）・投稿者の @名（au。本文と一緒に 14 日で消し、書き出しには入れない）（D27）。
+// 投稿者の表示名・リンクの欄は残さない（本文に入っている @アカウント名や URL はそのまま残る）。古い記録は自動で消す。
 
 const SHZ_DWELL_MS = 500; // この間、画面に出ていたら「見た」とする
 const SHZ_RATIO = 0.6; // 投稿のこれ以上が画面に入っているとき（背の高い投稿は、画面より高いと一度も満たさず、記録されない）
@@ -19,6 +20,7 @@ const shzClearQueue = () => { for (const k of Object.keys(shzQueue)) delete shzQ
 let shzFlushTimer = 0;
 let shzObserver = null;
 let shzMutation = null;
+let shzLastAcct = null; // 最後に覚えたログイン中のアカウント（設定画面が初めに選ぶアカウント。acctLast）
 
 // 開発用の自動スクロール（tools/dev-autoscroll.js。D21）が動いている間は、記録に auto: 1 の印を付ける。台本が書く時刻が 15 秒より古ければ動いていないとみなす。普段は何もしない
 function shzDevAuto() {
@@ -33,13 +35,15 @@ async function shzCapture(article) {
   const id = shzPostId(article);
   const text = shzPostText(article);
   if (!id || !text) return; // 画像だけの投稿は本文が無いので残さない
-  const key = await shzHashId(id);
+  const acct = shzAccountOf(document), au = shzAuthorOf(article);
+  const key = await shzHashId(acct ? `${id}@${acct}` : id); // アカウントごとに別の記録にする（同じ投稿を別のアカウントで見ても、それぞれに数える。D27）
   if (gen !== shzGen || epoch !== shzEpoch) return; // 待っている間にオフ・全削除された
   if (shzSeen.has(key)) return;
   shzSeen.add(key);
+  if (acct && acct !== shzLastAcct) { shzLastAcct = acct; chrome.storage.local.set({ acctLast: acct }); }
   // 反応の数（ct）と投稿からの分（age）は、見た時点のもの（D25）。数はあとで増えるが、記録し直さない
   const ct = shzPostCounts(article, document.documentElement.lang), age = shzPostAgeMin(article);
-  shzQueue[`rec:${key}`] = { text, feed, ts: Date.now(), ...(ct ? { ct } : {}), ...(age !== null ? { age } : {}), ...(shzDevAuto() ? { auto: 1 } : {}) };
+  shzQueue[`rec:${key}`] = { text, feed, ts: Date.now(), ...(acct ? { acct } : {}), ...(au ? { au } : {}), ...(ct ? { ct } : {}), ...(age !== null ? { age } : {}), ...(shzDevAuto() ? { auto: 1 } : {}) };
   if (!shzFlushTimer) shzFlushTimer = setTimeout(shzFlush, SHZ_FLUSH_MS); // 新しく記録するたびに待ち直さない（スクロール中に保存されなくなるため）
 }
 
@@ -132,7 +136,8 @@ chrome.storage.local.get({ recordEnabled: false }, (v) => {
 });
 chrome.storage.onChanged.addListener((c, area) => {
   if (area !== "local") return;
-  if (c.recordClearedAt) { // 設定画面で「すべて消す」が押された。このタブの保存待ちと「記録済み」の覚えも捨てる（記録は続ける）
+  if (c.recordClearedAt || c.acctClearedAt) { // 設定画面で「すべて消す」「このアカウントの記録を消す」が押された。このタブの保存待ちと「記録済み」の覚えも捨てる（記録は続ける。
+    // アカウントごとの消去でも、ほかのアカウントの保存待ち（数秒分）まで捨てる。覚えを捨てても、保存の前に既にある記録を見るので二重にはならない）
     shzEpoch++;
     shzDropPending();
   }

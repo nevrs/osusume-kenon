@@ -3,7 +3,8 @@
 // 返信がいいねに比べてどれだけ多いか（返信÷いいね）を、feed ごと・投稿からの時間ごとに並べる。古い投稿ほど数が大きいので、時間の帯で分けて比べる。
 // rbs の結果を渡すと、文の点（50 以上）と形（荒れ）の重なりを出す。3 つめを渡すと、荒れの投稿と、文も形も当てはまる投稿の本文を書き出す（人が読んで当たりを確かめる用。リポの外に置く）
 const fs = require("fs");
-const { shzRowdy, SHZ_HEAT } = require("../x-counts.js");
+const { shzHeavy, SHZ_HEAT } = require("../x-counts.js");
+const shzRowdy = (ct) => shzHeavy(ct, 1); // 荒れ = 返信がいいね以上（たたむ線のいちばん高い段。D27）
 const { shzInterval, shzCompareCounts } = require("../stats-core.js");
 const [exp, res, dump] = process.argv.slice(2);
 const rows = JSON.parse(fs.readFileSync(exp, "utf8")).rows.map((r, i) => ({ ...r, i }));
@@ -37,7 +38,7 @@ const show = (name, pred) => {
   const ci = (f) => { const [k, n] = t[f], c = shzInterval(k, n); return `${k}/${n} = ${pct(k / n)}（${c ? `${pct(c[0])}〜${pct(c[1])}` : "-"}）`; };
   console.log(`  ${name}: おすすめ ${ci("for-you")}・フォロー中 ${ci("following")} → ${v.verdict}${v.ratio ? `・倍率 ${v.ratio.toFixed(2)}` : ""}`);
 };
-// 返信が多めの形: 返信がいいねの 2% 以上で、返信 10 件以上（仮の線。D25 の荒れ（返信がいいね以上）は引き直す。DESIGN.md D26）
+// 返信が多めの形: 返信がいいねの 2% 以上で、返信 10 件以上（比べる用。拡張の温度は 3%: x-counts.js の SHZ_TEMP_LINE。DESIGN.md D27）
 const heavy = (r) => r.ct.r >= 10 && r.ct.r >= 0.02 * r.ct.l;
 console.log("\n## おすすめとフォロー中（すべての時間）");
 show("荒れ", (r) => shzRowdy(r.ct));

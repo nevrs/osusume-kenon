@@ -1,5 +1,5 @@
 // 「おすすめ」で見せられた投稿の記録（DESIGN.md D9）の、画面に触れない部分。record.js が使う。
-// 投稿の ID・本文を読む、広告かどうかを見る、どのタブかを見る、期限の来た記録を片付ける、数える。
+// 投稿の ID・本文・投稿者を読む、ログイン中のアカウントを読む、広告かどうかを見る、どのタブかを見る、期限の来た記録を片付ける、数える。
 
 // 投稿の ID（投稿へのリンクの /status/<数字>）。無ければ null
 function shzPostId(article) {
@@ -19,6 +19,29 @@ function shzPostText(article) {
     return (el.innerText ?? el.textContent).replace(/\s+/g, " ").trim();
   }
   return "";
+}
+
+// X の @名として読める文字か（英数字と _ の 1〜15 文字）
+const shzIsHandle = (s) => /^[A-Za-z0-9_]{1,15}$/.test(s || "");
+
+// 投稿者の @名（引用元の投稿者は含めない）。読めなければ null（D27。端末の中の記録にだけ残し、書き出しには入れない）
+function shzAuthorOf(article) {
+  for (const box of article.querySelectorAll(X_DOM.author)) {
+    const q = box.closest(X_DOM.quote);
+    if (q && article.contains(q)) continue;
+    for (const a of box.querySelectorAll("a[href]")) {
+      const m = /^\/([^/?#]+)$/.exec(a.getAttribute("href") || "");
+      if (m && shzIsHandle(m[1])) return m[1];
+    }
+    return null;
+  }
+  return null;
+}
+
+// ログイン中のアカウントの @名（左の列の「プロフィール」のリンク先）。読めなければ null（D27）
+function shzAccountOf(doc) {
+  const m = /^\/([^/?#]+)$/.exec(doc.querySelector(X_DOM.account)?.getAttribute("href") || "");
+  return m && shzIsHandle(m[1]) ? m[1] : null;
 }
 
 // 広告（「広告」「Ad」「Promoted」の札が付いた投稿）か。札の場所は未確認なので、本文と引用の外の短い文字だけを見る（推測）
@@ -75,7 +98,7 @@ function shzDay(ts) {
 }
 
 // 期限が来た記録の片付け方。{remove: [キー], strip: {キー: 本文を除いた新しい記録}}
-//   本文の期限（textDays）が過ぎた … 判定済み（前の問いの判定も含む）なら本文を消して点数だけ残す（strip）。未判定なら記録ごと消す（remove）
+//   本文の期限（textDays）が過ぎた … 判定済み（前の問いの判定も含む）なら本文と投稿者を消して点数だけ残す（strip）。未判定なら記録ごと消す（remove）
 //   点数の期限（countDays）が過ぎた、または時刻が壊れている … 記録ごと消す
 function shzPurgePlan(records, nowMs, textDays = SHZ_KEEP_DAYS, countDays = SHZ_KEEP_COUNT_DAYS) {
   const textLimit = nowMs - textDays * 86_400_000, countLimit = nowMs - countDays * 86_400_000;
@@ -84,7 +107,7 @@ function shzPurgePlan(records, nowMs, textDays = SHZ_KEEP_DAYS, countDays = SHZ_
     if (!(r.ts >= countLimit)) remove.push(k);
     else if (!(r.ts >= textLimit)) {
       if (!shzIsJudged(r) && !shzIsLegacy(r)) remove.push(k);
-      else if ("text" in r) { const { text, ...rest } = r; strip[k] = rest; }
+      else if ("text" in r || "au" in r) { const { text, au, ...rest } = r; strip[k] = rest; }
     }
   }
   return { remove, strip };
@@ -112,4 +135,4 @@ function shzSummarize(records) {
   return out;
 }
 
-if (typeof module !== "undefined") module.exports = { SHZ_KEEP_DAYS, SHZ_KEEP_COUNT_DAYS, shzIsJudged, shzIsLegacy, shzLumpHit, shzAnyHit, shzDay, shzPurgePlan, shzPostId, shzPostText, shzIsAd, shzFeedOf, shzHashId, shzSummarize, SHZ_AD_LABELS };
+if (typeof module !== "undefined") module.exports = { shzIsHandle, shzAuthorOf, shzAccountOf, SHZ_KEEP_DAYS, SHZ_KEEP_COUNT_DAYS, shzIsJudged, shzIsLegacy, shzLumpHit, shzAnyHit, shzDay, shzPurgePlan, shzPostId, shzPostText, shzIsAd, shzFeedOf, shzHashId, shzSummarize, SHZ_AD_LABELS };

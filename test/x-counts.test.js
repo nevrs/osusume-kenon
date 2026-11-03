@@ -1,7 +1,7 @@
 // node --test test/x-counts.test.js
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { parseCount, parseActionLabel, countsOf, shzRowdy, shzWide, SHZ_HEAT } = require("../x-counts.js");
+const { parseCount, parseActionLabel, countsOf, shzHeavy, shzWide, SHZ_HEAT, SHZ_TEMP_LINE, SHZ_FOLD_LINES } = require("../x-counts.js");
 // 実機で確かめた形（返信が 0 件のとき、文から返信が抜ける）を写した、作り物の例。実機の数は公開していない
 const fixture = { rows: [
   { label: "12 件の返信、340 件のリポスト、5100 件のいいね、210 件のブックマーク、98000 件の表示", replyButton: 12 },
@@ -58,13 +58,21 @@ test("countsOf: 日本語以外では文に無い種類を 0 にしない", () =
   assert.equal(countsOf("20 件のいいね", "ja").replies, 0);
 });
 
-test("目立つ投稿の見分け方（D25）: 荒れている = 返信が基準以上で、いいね以上。大きく広まった = 表示が基準以上", () => {
+test("目立つ投稿の見分け方（D25・D27）: 返信が多め = 返信 10 件以上で、返信がいいねの line 倍以上。大きく広まった = 表示が基準以上", () => {
   const R = SHZ_HEAT.replyMin, V = SHZ_HEAT.reach;
-  assert.equal(shzRowdy({ r: R, l: R }), true);
-  assert.equal(shzRowdy({ r: R, l: R + 1 }), false); // いいねのほうが多い
-  assert.equal(shzRowdy({ r: R - 1, l: 0 }), false); // 返信が少ない（ふつうの会話）
-  assert.equal(shzRowdy({ r: R, l: null }), false); // いいねが読めない
-  assert.equal(shzRowdy(null), false);
+  assert.equal(R, 10);
+  assert.equal(SHZ_TEMP_LINE, 0.03);
+  assert.deepEqual(SHZ_FOLD_LINES, [0.03, 0.1, 1]);
+  assert.equal(shzHeavy({ r: 30, l: 1000 }), true); // 3% ちょうど
+  assert.equal(shzHeavy({ r: 30, l: 1001 }), false);
+  assert.equal(shzHeavy({ r: 30, l: 300 }, 0.1), true);
+  assert.equal(shzHeavy({ r: 30, l: 301 }, 0.1), false);
+  assert.equal(shzHeavy({ r: R, l: R }, 1), true);
+  assert.equal(shzHeavy({ r: R, l: R + 1 }, 1), false); // いいねのほうが多い
+  assert.equal(shzHeavy({ r: R - 1, l: 0 }), false); // 返信が少ない（ふつうの会話）
+  assert.equal(shzHeavy({ r: R, l: null }), true); // 英語の画面: いいね 0 件は文に出ない → 0 とみなす
+  assert.equal(shzHeavy({ r: null, l: 5 }), false); // 返信 0 件は文に出ない → 0
+  assert.equal(shzHeavy(null), false);
   assert.equal(shzWide({ v: V }), true);
   assert.equal(shzWide({ v: V - 1 }), false);
   assert.equal(shzWide({ v: null }), false);

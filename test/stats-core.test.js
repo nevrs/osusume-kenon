@@ -183,18 +183,18 @@ test("話題の重なり: 暮らし・趣味・その他は 1 つにまとめて
 
 test("目立つ投稿: 数を読めた記録だけを feed ごとに数え、見下し・排除との重なりと、投稿からの分の中ほどを出す（D25）", () => {
   const { shzHeatTally, shzCompareCounts } = require("../stats-core.js");
-  const rowdy = { r: 50, p: 1, l: 10, b: 0, v: 5000 }, wide = { r: 1, p: 1, l: 900, b: 0, v: 200_000 }, calm = { r: 1, p: 0, l: 5, b: 0, v: 300 };
+  const heavy = { r: 50, p: 1, l: 10, b: 0, v: 5000 }, wide = { r: 1, p: 1, l: 900, b: 0, v: 200_000 }, calm = { r: 1, p: 0, l: 5, b: 0, v: 300 };
   const recs = {
-    a: { ...j("for-you", noon, 1, 1, 0), ct: rowdy, age: 600 },
+    a: { ...j("for-you", noon, 1, 1, 0), ct: heavy, age: 600 },
     b: { ...j("for-you", noon), ct: wide, age: 30 },
     c: { feed: "for-you", ts: noon, text: "未判定", ct: calm, age: 120 },
     d: { ...j("for-you", noon) }, // 数の無い記録（0.15.0 より前）は数えない
     e: { ...j("following", noon, 0, 1, 0), ct: calm, age: 10 },
-    f: { ...j("following", noon - 20 * DAY), ct: rowdy }, // 期間の外
+    f: { ...j("following", noon - 20 * DAY), ct: heavy }, // 期間の外
   };
   const t = shzHeatTally(recs, noon - DAY);
-  assert.deepEqual(t["for-you"], { n: 3, rowdy: 1, wide: 1, heat: 2, age: 120, judged: 2, any: 1, heatJudged: 2, heatAny: 1 });
-  assert.deepEqual(t.following, { n: 1, rowdy: 0, wide: 0, heat: 0, age: 10, judged: 1, any: 1, heatJudged: 0, heatAny: 0 });
+  assert.deepEqual(t["for-you"], { n: 3, heavy: 1, wide: 1, heat: 2, age: 120, judged: 2, any: 1, heatJudged: 2, heatAny: 1 });
+  assert.deepEqual(t.following, { n: 1, heavy: 0, wide: 0, heat: 0, age: 10, judged: 1, any: 1, heatJudged: 0, heatAny: 0 });
   assert.equal(shzCompareCounts(1, 3, 0, 1).verdict, "need"); // 少ない
   assert.equal(shzCompareCounts(30, 100, 10, 100).verdict, "higher");
 });
@@ -204,4 +204,48 @@ test("書き出し: 反応の数と投稿からの分も付ける（D25）", () 
   const rows = shzExportRows({ a: { feed: "for-you", ts: noon, text: "本文", ct: { r: 1, p: 0, l: 2, b: 0, v: 30 }, age: 5 } });
   assert.deepEqual(rows[0].ct, { r: 1, p: 0, l: 2, b: 0, v: 30 });
   assert.equal(rows[0].age, 5);
+});
+
+test("書き出し: どのアカウントで見たかは入れ、投稿者は入れない（D27）", () => {
+  const { shzExportRows } = require("../stats-core.js");
+  const rows = shzExportRows({ a: { feed: "for-you", ts: noon, text: "本文", acct: "me_1", au: "someone" }, b: { feed: "for-you", ts: noon + 1, text: "前の記録" } });
+  assert.equal(rows[0].acct, "me_1");
+  assert.ok(!("au" in rows[0]));
+  assert.ok(!("acct" in rows[1]));
+});
+
+test("アカウント: 件数の多い順に並べ、不明（0.16.0 より前の記録）は最後。アカウントごとに絞れる（D27）", () => {
+  const { shzAccounts, shzOfAcct } = require("../stats-core.js");
+  const recs = { a: { acct: "aa" }, b: { acct: "bb" }, c: { acct: "bb" }, d: {}, e: {}, f: {} };
+  assert.deepEqual(shzAccounts(recs), [{ acct: "bb", count: 2 }, { acct: "aa", count: 1 }, { acct: null, count: 3 }]);
+  assert.deepEqual(Object.keys(shzOfAcct(recs, "bb")), ["b", "c"]);
+  assert.deepEqual(Object.keys(shzOfAcct(recs, null)), ["d", "e", "f"]);
+});
+
+test("タイムライン温度: feed ごとに、3 分空いたら別の回とし、各回の始めの first 件だけを数える（D27）", () => {
+  const { shzTempTally } = require("../stats-core.js");
+  const hot = { r: 30, l: 100 }, cold = { r: 0, l: 100 };
+  const recs = {};
+  let i = 0;
+  const add = (feed, ts, ct) => { recs[`r${i++}`] = { feed, ts, ...(ct ? { ct } : {}) }; };
+  // 1 回目: 4 件（始めの 2 件が熱い）、2 回目（3 分空ける）: 3 件（熱いのは 3 件目だけ）
+  [hot, hot, cold, cold].forEach((c, k) => add("for-you", noon + k * 1000, c));
+  [cold, cold, hot].forEach((c, k) => add("for-you", noon + 180_000 + 3000 + k * 1000, c));
+  add("for-you", noon + 100, null); // 数の無い記録は数えない（回も切らない）
+  add("following", noon + 500, hot); // フォロー中の記録は、おすすめの回を切らない
+  const t = shzTempTally(recs, 0, Infinity, { first: 2 });
+  assert.deepEqual(t["for-you"], { n: 4, hot: 2, runs: 2 });
+  assert.deepEqual(t.following, { n: 1, hot: 1, runs: 1 });
+  assert.deepEqual(shzTempTally(recs)["for-you"], { n: 7, hot: 3, runs: 2 });
+  assert.deepEqual(shzTempTally(recs, 0, Infinity, { line: 0.5 })["for-you"].hot, 0); // 線を上げると減る
+  // 2 分 59 秒の間は同じ回
+  const near = { a: { feed: "for-you", ts: 0, ct: hot }, b: { feed: "for-you", ts: 179_999, ct: hot } };
+  assert.equal(shzTempTally(near)["for-you"].runs, 1);
+});
+
+test("基準（baseline.js）: 日付つきで、いちばん新しいものを使う。値は数え方と合う（D27）", () => {
+  const { SHZ_BASELINES, shzBaseline } = require("../baseline.js");
+  assert.ok(SHZ_BASELINES.length >= 1);
+  for (const b of SHZ_BASELINES) { assert.match(b.from, /^\d{4}-\d{2}-\d{2}$/); assert.ok(b.hot <= b.n && b.n >= 30); }
+  assert.equal(shzBaseline(), SHZ_BASELINES[SHZ_BASELINES.length - 1]);
 });

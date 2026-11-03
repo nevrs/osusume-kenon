@@ -129,7 +129,7 @@ const shzFjVersion = () => `${SHZ_FJ.version}/c${(/Chrome\/(\d+)/.exec(navigator
 const shzFjSleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const shzFjSessionOn = (st) => !!(st.session && !st.session.end);
 
-const shzFjState = () => chrome.storage.local.get({ recordEnabled: false, session: null, judgeDay: null, judgeLock: null, recordClearedAt: 0, textClearedAt: 0 });
+const shzFjState = () => chrome.storage.local.get({ recordEnabled: false, session: null, judgeDay: null, judgeLock: null, recordClearedAt: 0, textClearedAt: 0, acctClearedAt: null });
 
 // 今、判定してよいか。記録がオン、または測定モードの間だけ。パッシブは画面が見えているときだけ
 function shzFjShouldRun(st) {
@@ -186,9 +186,10 @@ async function shzFjRun() {
       // 読んでから書くまでの間に、消す操作が割り込んでも本文を戻さない: 書いたあとで、消す操作の目印が変わっていないか見て、変わっていれば消し直す
       const { a, h, m, ...rest } = latest; // 前の問いの答えは消す（同じ記録に 2 つの物差しを残さない。g・c・x・jv は下で上書き）
       await chrome.storage.local.set({ [k]: { ...rest, ...ans }, ...(fast ? {} : { judgeDay: { d: today, n: used + 1 } }) });
-      const after = await chrome.storage.local.get({ recordClearedAt: 0, textClearedAt: 0 });
-      if (after.recordClearedAt !== st.recordClearedAt) await chrome.storage.local.remove(k); // 「すべて消す」が割り込んだ
-      else if (after.textClearedAt !== st.textClearedAt && latest.ts < after.textClearedAt) { const { text, ...kept } = { ...rest, ...ans }; await chrome.storage.local.set({ [k]: kept }); } // 「本文だけ消す」が割り込んだ
+      const after = await chrome.storage.local.get({ recordClearedAt: 0, textClearedAt: 0, acctClearedAt: null });
+      const acctHit = after.acctClearedAt?.at !== st.acctClearedAt?.at && (after.acctClearedAt.acct ?? null) === (latest.acct ?? null);
+      if (after.recordClearedAt !== st.recordClearedAt || acctHit) await chrome.storage.local.remove(k); // 「すべて消す」「このアカウントの記録を消す」が割り込んだ
+      else if (after.textClearedAt !== st.textClearedAt && latest.ts < after.textClearedAt) { const { text, au, ...kept } = { ...rest, ...ans }; await chrome.storage.local.set({ [k]: kept }); } // 「本文だけ消す」が割り込んだ
       await shzFjSleep(fast ? SHZ_FJ.sessionGapMs : SHZ_FJ.gapMs);
     }
   } finally {

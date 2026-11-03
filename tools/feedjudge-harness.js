@@ -213,6 +213,18 @@ const check = (name, ok, detail) => results.push(`${ok ? "OK" : "NG"}  ${name}${
   t = setup({ stored: { "rec:a": rec("馬鹿", Date.now() - 5000) }, onSet: (o, store) => { if (!hit && "rec:a" in o) { hit = true; store.textClearedAt = Date.now() + 1; } } });
   await wait(400);
   check("書く直前に「本文だけ消す」が割り込んだら、本文を消し直し、答えは残す", hit && t.store["rec:a"] && !("text" in t.store["rec:a"]) && t.store["rec:a"].c === 1);
+  hit = false;
+  t = setup({ stored: { "rec:a": { ...rec("馬鹿", Date.now() - 5000), au: "someone" } }, onSet: (o, store) => { if (!hit && "rec:a" in o) { hit = true; store.textClearedAt = Date.now() + 1; } } });
+  await wait(400);
+  check("「本文だけ消す」が割り込んだら、投稿者の @名も消し直す（D27）", hit && t.store["rec:a"] && !("au" in t.store["rec:a"]) && t.store["rec:a"].c === 1);
+
+  // 書く直前に「このアカウントの記録を消す」が割り込んだら、そのアカウントの記録だけ復活させない（D27）
+  for (const [acct, gone] of [["me", true], ["other", false]]) {
+    hit = false;
+    t = setup({ stored: { "rec:a": { ...rec("馬鹿"), acct: "me" } }, onSet: (o, store) => { if (!hit && "rec:a" in o) { hit = true; store.acctClearedAt = { acct, at: Date.now() }; } } });
+    await wait(400);
+    check(`書く直前に「${acct} の記録を消す」が割り込んだら、${gone ? "その記録を復活させない" : "別のアカウントの記録は残す"}`, hit && ("rec:a" in t.store) === !gone);
+  }
 
   // 測定モードの判定は、パッシブの 1 日の枠に入れない
   t = setup({ stored: { "rec:a": rec("1"), "rec:b": rec("2") }, session: { start: Date.now() - 1000, targetEach: 50, prev: false }, recordEnabled: false });

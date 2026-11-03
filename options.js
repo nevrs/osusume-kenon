@@ -271,7 +271,7 @@ function renderTopics(recs) {
   }
 }
 
-// 目立たされる投稿（D25）。荒れている・大きく広まった投稿の割合を、おすすめとフォロー中で並べる。差がはっきりした行に印を付ける
+// 目立たされる投稿（D25）。返信が多め・大きく広まった投稿の割合を、おすすめとフォロー中で並べる。差がはっきりした行に印を付ける
 const ageText = (m) => (m === null ? "—" : m < 60 ? shzT("ageMin", { n: m }) : m < 1440 ? shzT("ageHour", { n: Math.round(m / 60) }) : shzT("ageDay", { n: Math.round(m / 1440) }));
 function renderHeat(recs) {
   const h = $("heatHeadline"), sub = $("heatSub"), rows = $("heatRows"), hostile = $("heatHostile"), age = $("heatAge");
@@ -290,7 +290,7 @@ function renderHeat(recs) {
   h.textContent = shzT({ higher: "heatHigher", lower: "heatLower", unclear: "heatUnclear" }[c.verdict]);
   if (c.verdict !== "unclear") h.classList.add(c.verdict);
   sub.textContent = shzT("heatSub", { a: pct1(c.a), b: pct1(c.b) });
-  const lines = ["rowdy", "wide", "heat"].map((k) => ({ k, ...shzCompareCounts(A[k], A.n, B[k], B.n) }));
+  const lines = ["heavy", "wide", "heat"].map((k) => ({ k, ...shzCompareCounts(A[k], A.n, B[k], B.n) }));
   const max = Math.max(0.01, ...lines.map((r) => Math.max(r.a, r.b)));
   for (const r of lines) {
     const row = el("div", "topic"), pair = el("div", "pair");
@@ -315,6 +315,107 @@ function renderHeat(recs) {
   hostile.textContent = hc.verdict === "need" ? shzT("heatHostileNeed", { min: SHZ_MIN_N, a: hj, b: oj }) : shzT("heatHostile", { a: pct1(hc.a), b: pct1(hc.b) }) + shzT(`heatHostile_${hc.verdict}`);
   age.textContent = shzT("heatAge", { a: ageText(A.age), b: ageText(B.age) });
 }
+
+// ---- タイムライン温度（D27）。反応の形だけで数え、「学ぶ前の X」の基準（baseline.js）と並べる ----
+const DAY = 86_400_000;
+const acctName = (a) => (a === null ? shzT("acctUnknown") : `@${a}`);
+let tempNow = null; // 共有に使う、いま出しているおすすめの温度 { a, b, n }。比べられないときは null
+
+// 1 本の温度計（塗り 1 色と、90% の幅）。件数が足りなければ「—」
+function tempRow(box, name, hot, n, color, max) {
+  const row = el("div", "gauge"), track = el("div", "track"), ok = n >= SHZ_MIN_N;
+  row.append(el("span", "name", name));
+  const W = (x) => `${Math.min(100, (x / max) * 100)}%`;
+  if (ok) {
+    const s = el("span", "seg");
+    s.style.left = "0"; s.style.width = W(hot / n); s.style.background = color;
+    track.append(s);
+    const iv = shzInterval(hot, n), b = el("span", "band");
+    b.style.left = W(iv[0]); b.style.width = `calc(${W(iv[1])} - ${W(iv[0])})`;
+    b.title = `${pct1(iv[0])}〜${pct1(iv[1])}`;
+    track.append(b);
+  }
+  const val = el("span", "val", ok ? pct1(hot / n) : "—");
+  val.append(el("small", "", shzT("tempN", { n })));
+  row.append(track, val);
+  box.append(row);
+}
+
+function renderTemp(recs, allRecs, accts) {
+  const B = shzBaseline(), from = Date.now() - 14 * DAY;
+  const t = shzTempTally(recs, from), A = t["for-you"], F = t.following;
+  const h = $("tempHeadline"), sub = $("tempSub"), box = $("tempGauges");
+  h.className = "headline";
+  setRich($("tempFoot"), shzT("tempFoot", { from: B.from, to: B.to, n: B.n }));
+  const c = shzCompareCounts(A.hot, A.n, B.hot, B.n);
+  tempNow = c.verdict === "need" ? null : { a: c.a, b: c.b, n: A.n };
+  $("shareX").disabled = $("shareImg").disabled = !tempNow;
+  if (c.verdict === "need") {
+    h.textContent = shzT("tempNeed");
+    sub.textContent = shzT("tempNeedSub", { min: SHZ_MIN_N, n: A.n });
+  } else {
+    h.textContent = shzT({ higher: "tempHigher", lower: "tempLower", unclear: "tempUnclear" }[c.verdict]);
+    if (c.verdict !== "unclear") h.classList.add(c.verdict);
+    sub.textContent = shzT("tempSub", { a: pct1(c.a), b: pct1(c.b) }) + (F.n >= SHZ_MIN_N ? shzT("tempSubFl", { c: pct1(F.hot / F.n) }) : "");
+  }
+  // 目盛りは 3 本（おすすめ・基準・フォロー中）と、アカウントどうしの行で共通。幅の上の端まで入るよう、10% 刻みで切り上げる
+  const rows = [[shzT("feedForYou"), A.hot, A.n, "var(--fy)"], [shzT("tempBase"), B.hot, B.n, "var(--base)"], [shzT("feedFollowing"), F.hot, F.n, "var(--fl)"]];
+  const others = accts.length > 1 ? accts.map(({ acct }) => [acctName(acct), shzTempTally(shzOfAcct(allRecs, acct), from)["for-you"]]) : [];
+  const tops = [...rows.map(([, k, n]) => (n >= SHZ_MIN_N ? shzInterval(k, n)[1] : 0)), ...others.map(([, o]) => (o.n >= SHZ_MIN_N ? shzInterval(o.hot, o.n)[1] : 0))];
+  const max = Math.max(0.1, Math.ceil(Math.max(...tops) * 10) / 10);
+  box.replaceChildren();
+  for (const [name, k, n, color] of rows) tempRow(box, name, k, n, color, max);
+  const scale = el("div", "scale"), ticks = el("span");
+  for (const v of [0, max / 2, max]) ticks.append(el("span", "", pctAxis(v)));
+  scale.append(el("span"), ticks, el("span"));
+  box.append(scale);
+  const list = $("tempAcctRows");
+  list.replaceChildren();
+  $("tempAccts").hidden = !others.length;
+  for (const [name, o] of others) tempRow(list, name, o.hot, o.n, "var(--fy)", max);
+}
+
+// X で共有（D27）: 文は X の投稿画面に入れるだけ。投稿は本人が押す。アカウント名は入れない
+$("shareX").addEventListener("click", () => {
+  if (!tempNow) return;
+  const text = shzT("shareText", { a: pct1(tempNow.a), b: pct1(tempNow.b) });
+  window.open(`https://x.com/intent/post?text=${encodeURIComponent(text)}`, "_blank", "noopener");
+  say(shzT("shareOpened"));
+});
+// 画像（1200×630）: おすすめの温度と基準の 2 本の棒。アカウント名は入れない
+function shareImage() {
+  const B = shzBaseline(), W = 1200, H = 630, cv = document.createElement("canvas");
+  cv.width = W; cv.height = H;
+  const g = cv.getContext("2d"), font = (px, bold) => `${bold ? 700 : 400} ${px}px system-ui, sans-serif`;
+  g.fillStyle = "#f4f6f8"; g.fillRect(0, 0, W, H);
+  g.fillStyle = "#1d2a35"; g.font = font(44, true); g.fillText(shzT("imgTitle"), 72, 110);
+  g.fillStyle = "#66727e"; g.font = font(26); g.fillText(shzT("imgSub", { n: tempNow.n }), 72, 156);
+  g.fillStyle = "#c9533d"; g.font = font(140, true); g.fillText(pct1(tempNow.a), 72, 320);
+  const max = Math.max(0.1, Math.ceil(Math.max(tempNow.a, tempNow.b) * 10) / 10);
+  const bar = (y, label, v, color) => {
+    g.fillStyle = "#1d2a35"; g.font = font(26, true); g.fillText(label, 72, y - 12);
+    g.fillStyle = "#eceff2"; g.fillRect(72, y, 900, 36);
+    g.fillStyle = color; g.fillRect(72, y, (900 * v) / max, 36);
+    g.fillStyle = "#1d2a35"; g.font = font(30, true); g.fillText(pct1(v), 996, y + 30);
+  };
+  bar(400, shzT("imgForYou"), tempNow.a, "#c9533d");
+  bar(490, shzT("imgBase", { from: B.from, to: B.to }), tempNow.b, "#8b939b");
+  g.fillStyle = "#66727e"; g.font = font(22);
+  g.fillText(shzT("imgDef"), 72, 575);
+  g.fillText(`Timeline Checker for X · ${shzDay(Date.now())}`, 72, 608);
+  return cv;
+}
+$("shareImg").addEventListener("click", () => {
+  if (!tempNow) return;
+  shareImage().toBlob((blob) => {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `timeline-temperature-${shzDay(Date.now())}.png`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+    say(shzT("shareSaved"));
+  }, "image/png");
+});
 
 function renderHero(t) {
   renderHeadline(t);
@@ -373,6 +474,27 @@ function renderSession(session, recs) {
   }
 }
 
+// アカウント（D27）。いま見ているアカウント（undefined = まだ選んでいない。X で最後に見たアカウント acctLast を初めに選ぶ）
+let viewAcct;
+let acctList = [];
+// アカウントが 2 つ以上あるときだけ、そのアカウントの記録に絞る（1 つなら、アカウント不明の記録も一緒に数える）
+const acctFilter = (recs) => (acctList.length > 1 ? shzOfAcct(recs, viewAcct) : recs);
+function renderAcct(accts, last) {
+  acctList = accts;
+  if (!accts.some((a) => a.acct === viewAcct)) viewAcct = accts.some((a) => a.acct === last) ? last : accts[0]?.acct ?? null;
+  const many = accts.length > 1, sel = $("acctSel");
+  $("acctBar").hidden = !many;
+  sel.replaceChildren(...accts.map(({ acct, count }) => { const o = document.createElement("option"); o.value = acct ?? ""; o.textContent = `${acctName(acct)}（${count}）`; o.selected = acct === viewAcct; return o; }));
+  const del = $("recAcctDelete");
+  del.hidden = !many;
+  del.textContent = shzT("recAcctDelete", { acct: acctName(viewAcct) });
+}
+$("acctSel").addEventListener("change", () => {
+  viewAcct = $("acctSel").value || null;
+  render();
+  drawSample();
+});
+
 let renderSeq = 0, renderTimer = 0;
 function scheduleRender() { // 判定が進むたびに書き換えが続くので、まとめて描く
   clearTimeout(renderTimer);
@@ -382,26 +504,31 @@ async function render() {
   const my = ++renderSeq;
   const all = await chrome.storage.local.get(null);
   if (my !== renderSeq) return; // 後から始めた読み出しがあるので、古いほうは描かない
-  const recs = Object.fromEntries(Object.entries(all).filter(([k]) => k.startsWith("rec:")));
-  renderCount(recs);
+  const allRecs = Object.fromEntries(Object.entries(all).filter(([k]) => k.startsWith("rec:")));
+  const accts = shzAccounts(allRecs);
+  renderAcct(accts, all.acctLast ?? null);
+  const recs = acctFilter(allRecs);
+  renderCount(allRecs);
+  renderTemp(recs, allRecs, accts);
   renderTrend(recs);
   renderSession(all.session ?? null, recs);
   renderFoldToday(all.heatFoldDay);
 }
 
 // たたむ（D25）。設定と、今日たたんだ件数
-const foldOn = $("heatFoldEnabled"), foldRowdy = $("foldRowdy"), foldWide = $("foldWide");
+const foldOn = $("heatFoldEnabled"), foldRowdy = $("foldRowdy"), foldWide = $("foldWide"), foldLine = $("foldLine");
 function showFoldSettings(v) {
   foldOn.checked = v.heatFoldEnabled === true;
   foldRowdy.checked = v.heatFoldRules?.rowdy !== false; // fold.js と同じ初期値（荒れているはオン、大きく広まったはオフ）
   foldWide.checked = v.heatFoldRules?.wide === true;
+  foldLine.value = String(SHZ_FOLD_LINES.includes(v.heatFoldRules?.line) ? v.heatFoldRules.line : SHZ_FOLD_LINES[0]); // 初めは 3%（D27）
 }
 chrome.storage.local.get({ heatFoldEnabled: false, heatFoldRules: null }, showFoldSettings);
 foldOn.addEventListener("change", async () => {
   await chrome.storage.local.set({ heatFoldEnabled: foldOn.checked });
   say(shzT(foldOn.checked ? "foldOnMsg" : "foldOffMsg"));
 });
-for (const box of [foldRowdy, foldWide]) box.addEventListener("change", () => chrome.storage.local.set({ heatFoldRules: { rowdy: foldRowdy.checked, wide: foldWide.checked } }));
+for (const box of [foldRowdy, foldWide, foldLine]) box.addEventListener("change", () => chrome.storage.local.set({ heatFoldRules: { rowdy: foldRowdy.checked, wide: foldWide.checked, line: Number(foldLine.value) } }));
 function renderFoldToday(v) {
   const today = shzDay(Date.now());
   const d = v?.d === today ? v : { n: 0, o: 0 };
@@ -416,6 +543,17 @@ $("recDelete").addEventListener("click", async () => {
   await render();
   await drawSample(); // 消した本文を見本の欄（とコピー）に残さない
   say(shzT("deleted"));
+});
+$("recAcctDelete").addEventListener("click", async () => {
+  const acct = viewAcct ?? null;
+  // 開いている X のタブと、判定の最中の書き込みにも伝える（先に伝えてから消す。「すべて消す」と同じ順）
+  await chrome.storage.local.set({ acctClearedAt: { acct, at: Date.now() } });
+  const all = await chrome.storage.local.get(null);
+  await chrome.storage.local.remove(Object.keys(all).filter((k) => k.startsWith("rec:") && shzAcctOf(all[k]) === acct));
+  viewAcct = undefined;
+  await render();
+  await drawSample();
+  say(shzT("acctDeleted", { acct: acctName(acct) }));
 });
 $("recStrip").addEventListener("click", async () => {
   await chrome.storage.local.set({ textClearedAt: Date.now() }); // 先に伝える（開いている X のタブの保存待ちと、判定の最中の書き込みが、本文を戻さないように）
@@ -465,7 +603,7 @@ async function drawSample(repick = true) {
   if (repick || !samplePicks) {
     const all = await chrome.storage.local.get(null);
     const recs = Object.fromEntries(Object.entries(all).filter(([k]) => k.startsWith("rec:")));
-    samplePicks = shzSample(recs, { n: 10, hitOnly: sampleHit, fromTs: Date.now() - SHZ_KEEP_DAYS * 86_400_000 });
+    samplePicks = shzSample(acctFilter(recs), { n: 10, hitOnly: sampleHit, fromTs: Date.now() - SHZ_KEEP_DAYS * 86_400_000 });
   }
   const picks = samplePicks;
   const list = $("sampleList"), empty = $("sampleEmpty");
@@ -478,7 +616,7 @@ async function drawSample(repick = true) {
     item.className = "sample";
     const meta = document.createElement("div");
     meta.className = "meta";
-    meta.append(`${sampleHead(r)} · `);
+    meta.append(`${sampleHead(r)}${r.au ? ` · @${r.au}` : ""} · `); // 投稿者は表示だけ（コピーには入れない。D27）
     const hits = sampleHits(r);
     const tag = document.createElement(hits.length ? "b" : "span");
     tag.textContent = hits.length ? hits.join("・") : shzT("sampleNoHit");
