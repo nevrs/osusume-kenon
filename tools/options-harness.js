@@ -296,6 +296,15 @@ const check = (name, ok, detail) => results.push(`${ok ? "OK" : "NG"}  ${name}${
   await wait(400);
   check("温度: 各回の始めの 150 件だけを数える", t.text("tempSub").includes("おすすめ 0%") && t.text("tempGauges").includes("150 件"), t.text("tempSub"));
 
+  // 前の版から上げた直後（@名の分かるアカウント 1 つと、アカウント不明の前の記録）: 分けずに一緒に数える
+  t = setup({ ...temp("old", "for-you", 40, 20), ...temp("new", "for-you", 20, 0, { acct: "acct_a" }, now - 100_000), acctLast: "acct_a" });
+  await wait(400);
+  check("アカウント: @名の分かるアカウントが 1 つなら、選び欄を出さず、前の記録（不明）も一緒に数える", t.d.getElementById("acctBar").hidden && t.d.getElementById("tempAccts").hidden && t.text("tempGauges").includes("60 件"), t.text("tempGauges"));
+  check("温度の説明の数は、x-counts.js・stats-core.js の値から入れる", t.text("tempDef").includes("10 件以上") && t.text("tempDef").includes("3% 以上") && t.text("tempDef").includes("150 件") && t.text("tempDef").includes("3 分"), t.text("tempDef"));
+  t.click("recDelete");
+  await wait(300);
+  check("「すべて消す」で、最後に見たアカウントの @名も消す", !("acctLast" in t.store));
+
   // アカウント（D27）: 2 つ以上あれば選び欄を出し、最後に X で見たアカウントを初めに選ぶ。下の欄もそのアカウントで数える
   const two = { ...temp("aa", "for-you", 60, 30, { acct: "acct_a", au: "writer1", text: "本文A" }), ...temp("bb", "for-you", 60, 3, { acct: "acct_b", text: "本文B" }), ...temp("nn", "following", 5, 0), acctLast: "acct_b" };
   t = setup(two);

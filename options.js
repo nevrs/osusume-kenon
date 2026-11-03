@@ -5,6 +5,8 @@ const say = (t) => { $("saved").textContent = t; clearTimeout(sayTimer); sayTime
 const feedLabel = (f) => shzT(f === "for-you" ? "feedForYou" : "feedFollowing");
 const SESSION_TARGET = 50; // 測定モードで、それぞれの feed について集める件数
 
+// 文言に差し込む線の数（data-i18n の文で使う。x-counts.js の値）
+const LINE_VARS_I18N = { r: SHZ_HEAT.replyMin };
 // 文言を言語に合わせて入れる。**…** は太字（DOM で組む）
 function setRich(el, text) {
   el.replaceChildren();
@@ -15,7 +17,7 @@ function setRich(el, text) {
 }
 function applyLang() {
   document.documentElement.lang = shzLang;
-  for (const el of document.querySelectorAll("[data-i18n]")) setRich(el, shzT(el.dataset.i18n));
+  for (const el of document.querySelectorAll("[data-i18n]")) setRich(el, shzT(el.dataset.i18n, LINE_VARS_I18N));
   document.title = shzT("title");
   chrome.storage.local.get({ debugLog: [] }, (v) => showLog(v.debugLog));
   drawSample(false);
@@ -278,7 +280,7 @@ function renderHeat(recs) {
   rows.replaceChildren();
   h.className = "headline";
   hostile.textContent = age.textContent = "";
-  $("heatRowsNote").textContent = shzT("heatRowsNote", { r: SHZ_HEAT.replyMin, v: SHZ_HEAT.reach.toLocaleString() });
+  $("heatRowsNote").textContent = shzT("heatRowsNote", { ...LINE_VARS, v: SHZ_HEAT.reach.toLocaleString() });
   const t = shzHeatTally(recs, Date.now() - 14 * 86_400_000), A = t["for-you"], B = t.following;
   const c = shzCompareCounts(A.heat, A.n, B.heat, B.n);
   $("heatLegend").hidden = c.verdict === "need";
@@ -318,6 +320,7 @@ function renderHeat(recs) {
 
 // ---- タイムライン温度（D27）。反応の形だけで数え、「学ぶ前の X」の基準（baseline.js）と並べる ----
 const DAY = 86_400_000;
+const LINE_VARS = { r: SHZ_HEAT.replyMin, p: Math.round(SHZ_TEMP_LINE * 100), n: SHZ_RUN_FIRST, gap: SHZ_RUN_GAP_MS / 60_000 }; // 返信が多めの線の数（文に直書きしない）
 const acctName = (a) => (a === null ? shzT("acctUnknown") : `@${a}`);
 let tempNow = null; // 共有に使う、いま出しているおすすめの温度 { a, b, n }。比べられないときは null
 
@@ -347,6 +350,7 @@ function renderTemp(recs, allRecs, accts) {
   const h = $("tempHeadline"), sub = $("tempSub"), box = $("tempGauges");
   h.className = "headline";
   setRich($("tempFoot"), shzT("tempFoot", { from: B.from, to: B.to, n: B.n }));
+  $("tempDef").textContent = shzT("tempDef", LINE_VARS);
   const c = shzCompareCounts(A.hot, A.n, B.hot, B.n);
   tempNow = c.verdict === "need" ? null : { a: c.a, b: c.b, n: A.n };
   $("shareX").disabled = $("shareImg").disabled = !tempNow;
@@ -360,7 +364,7 @@ function renderTemp(recs, allRecs, accts) {
   }
   // 目盛りは 3 本（おすすめ・基準・フォロー中）と、アカウントどうしの行で共通。幅の上の端まで入るよう、10% 刻みで切り上げる
   const rows = [[shzT("feedForYou"), A.hot, A.n, "var(--fy)"], [shzT("tempBase"), B.hot, B.n, "var(--base)"], [shzT("feedFollowing"), F.hot, F.n, "var(--fl)"]];
-  const others = accts.length > 1 ? accts.map(({ acct }) => [acctName(acct), shzTempTally(shzOfAcct(allRecs, acct), from)["for-you"]]) : [];
+  const others = shzManyAccts(accts) ? accts.map(({ acct }) => [acctName(acct), shzTempTally(shzOfAcct(allRecs, acct), from)["for-you"]]) : [];
   const tops = [...rows.map(([, k, n]) => (n >= SHZ_MIN_N ? shzInterval(k, n)[1] : 0)), ...others.map(([, o]) => (o.n >= SHZ_MIN_N ? shzInterval(o.hot, o.n)[1] : 0))];
   const max = Math.max(0.1, Math.ceil(Math.max(...tops) * 10) / 10);
   box.replaceChildren();
@@ -401,8 +405,9 @@ function shareImage() {
   bar(400, shzT("imgForYou"), tempNow.a, "#c9533d");
   bar(490, shzT("imgBase", { from: B.from, to: B.to }), tempNow.b, "#8b939b");
   g.fillStyle = "#66727e"; g.font = font(22);
-  g.fillText(shzT("imgDef"), 72, 575);
-  g.fillText(`Timeline Checker for X · ${shzDay(Date.now())}`, 72, 608);
+  g.fillText(shzT("imgDef", LINE_VARS), 72, 560);
+  g.fillText(shzT("imgBaseNote"), 72, 590);
+  g.fillText(`Timeline Checker for X · ${shzDay(Date.now())}`, 72, 620);
   return cv;
 }
 $("shareImg").addEventListener("click", () => {
@@ -477,12 +482,14 @@ function renderSession(session, recs) {
 // アカウント（D27）。いま見ているアカウント（undefined = まだ選んでいない。X で最後に見たアカウント acctLast を初めに選ぶ）
 let viewAcct;
 let acctList = [];
-// アカウントが 2 つ以上あるときだけ、そのアカウントの記録に絞る（1 つなら、アカウント不明の記録も一緒に数える）
-const acctFilter = (recs) => (acctList.length > 1 ? shzOfAcct(recs, viewAcct) : recs);
+// @名の分かるアカウントが 2 つ以上あるときだけ、そのアカウントの記録に絞る。1 つ以下なら、アカウント不明（0.16.0 より前）の記録も一緒に数える
+// （前の版から上げた人の記録を、上げた直後から「不明」に分けて見えなくしない。2 つ以上なら、不明は選び欄の 1 つになる）
+const shzManyAccts = (accts) => accts.filter((a) => a.acct !== null).length > 1;
+const acctFilter = (recs) => (shzManyAccts(acctList) ? shzOfAcct(recs, viewAcct) : recs);
 function renderAcct(accts, last) {
   acctList = accts;
   if (!accts.some((a) => a.acct === viewAcct)) viewAcct = accts.some((a) => a.acct === last) ? last : accts[0]?.acct ?? null;
-  const many = accts.length > 1, sel = $("acctSel");
+  const many = shzManyAccts(accts), sel = $("acctSel");
   $("acctBar").hidden = !many;
   sel.replaceChildren(...accts.map(({ acct, count }) => { const o = document.createElement("option"); o.value = acct ?? ""; o.textContent = `${acctName(acct)}（${count}）`; o.selected = acct === viewAcct; return o; }));
   const del = $("recAcctDelete");
@@ -539,7 +546,7 @@ $("recDelete").addEventListener("click", async () => {
   // 開いている X のタブにも伝える（まだ保存していない分と「記録済み」の覚えを捨てさせる）。先に伝えてから消す
   await chrome.storage.local.set({ recordClearedAt: Date.now() });
   const all = await chrome.storage.local.get(null);
-  await chrome.storage.local.remove(Object.keys(all).filter((k) => k.startsWith("rec:")));
+  await chrome.storage.local.remove([...Object.keys(all).filter((k) => k.startsWith("rec:")), "acctLast", "acctClearedAt"]); // @名の残る印も消す（D27）
   await render();
   await drawSample(); // 消した本文を見本の欄（とコピー）に残さない
   say(shzT("deleted"));

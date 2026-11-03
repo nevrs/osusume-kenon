@@ -187,7 +187,7 @@ async function shzFjRun() {
       const { a, h, m, ...rest } = latest; // 前の問いの答えは消す（同じ記録に 2 つの物差しを残さない。g・c・x・jv は下で上書き）
       await chrome.storage.local.set({ [k]: { ...rest, ...ans }, ...(fast ? {} : { judgeDay: { d: today, n: used + 1 } }) });
       const after = await chrome.storage.local.get({ recordClearedAt: 0, textClearedAt: 0, acctClearedAt: null });
-      const acctHit = after.acctClearedAt?.at !== st.acctClearedAt?.at && (after.acctClearedAt.acct ?? null) === (latest.acct ?? null);
+      const acctHit = !!after.acctClearedAt && after.acctClearedAt.at !== st.acctClearedAt?.at && (after.acctClearedAt.acct ?? null) === (latest.acct ?? null);
       if (after.recordClearedAt !== st.recordClearedAt || acctHit) await chrome.storage.local.remove(k); // 「すべて消す」「このアカウントの記録を消す」が割り込んだ
       else if (after.textClearedAt !== st.textClearedAt && latest.ts < after.textClearedAt) { const { text, au, ...kept } = { ...rest, ...ans }; await chrome.storage.local.set({ [k]: kept }); } // 「本文だけ消す」が割り込んだ
       await shzFjSleep(fast ? SHZ_FJ.sessionGapMs : SHZ_FJ.gapMs);
