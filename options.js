@@ -43,6 +43,12 @@ rec.addEventListener("change", async () => {
   await chrome.storage.local.set({ recordEnabled: rec.checked });
   say(shzT(rec.checked ? "recOnMsg" : "recOffMsg"));
 });
+// 温度の欄の「測り始める」（D29）。記録の欄のチェックと同じ設定をオンにする（測定中は記録がオンなので、このボタンは出ない）
+$("startRec").addEventListener("click", async () => {
+  rec.checked = true;
+  await chrome.storage.local.set({ recordEnabled: true });
+  say(shzT("recOnMsg"));
+});
 chrome.storage.onChanged.addListener((c, area) => {
   if (area === "local" && c.recordEnabled) rec.checked = c.recordEnabled.newValue === true; // 測定モードの開始・終了で変わる
 });
@@ -361,7 +367,7 @@ function renderTempWeek(recs) {
     : shzT({ higher: "tempWeekUp", lower: "tempWeekDown", unclear: "tempWeekSame" }[c.verdict], { a: pct1(c.a), b: pct1(c.b) });
 }
 
-function renderTemp(recs, allRecs, accts) {
+function renderTemp(recs, allRecs, accts, recording) {
   const B = shzBaseline(), from = Date.now() - 14 * DAY;
   const t = shzTempTally(recs, from), A = t["for-you"], F = t.following;
   const h = $("tempHeadline"), sub = $("tempSub"), box = $("tempGauges");
@@ -374,9 +380,13 @@ function renderTemp(recs, allRecs, accts) {
   $("tempPlain").hidden = !tempNow;
   if (tempNow) $("tempPlain").textContent = tempPlainText(tempNow.a);
   renderTempWeek(recs);
+  // 温度がまだ出ないとき: 記録がオフなら「測り始める」を出し、オンなら、あと何件かと X を開くリンクを出す（D29）
+  $("tempStart").hidden = c.verdict !== "need" || recording;
+  $("tempGo").hidden = c.verdict !== "need" || !recording;
+  $("tempWeek").hidden = c.verdict === "need"; // 14 日で足りないうちは、7 日ずつの比べも出せない（件数の行が並ぶだけになる）
   if (c.verdict === "need") {
-    h.textContent = shzT("tempNeed");
-    sub.textContent = shzT("tempNeedSub", { min: SHZ_MIN_N, n: A.n });
+    h.textContent = shzT(recording ? "tempNeed" : "tempNeedOff");
+    sub.textContent = recording ? shzT("tempNeedSub", { left: SHZ_MIN_N - A.n, n: A.n }) : "";
   } else {
     h.textContent = shzT({ higher: "tempHigher", lower: "tempLower", unclear: "tempUnclear" }[c.verdict]);
     if (c.verdict !== "unclear") h.classList.add(c.verdict);
@@ -536,7 +546,7 @@ async function render() {
   renderAcct(accts, all.acctLast ?? null);
   const recs = acctFilter(allRecs);
   renderCount(allRecs);
-  renderTemp(recs, allRecs, accts);
+  renderTemp(recs, allRecs, accts, all.recordEnabled === true);
   renderTrend(recs);
   renderSession(all.session ?? null, recs);
   renderFoldToday(all.heatFoldDay);

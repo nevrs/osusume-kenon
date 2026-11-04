@@ -8,6 +8,8 @@ for cs in m.get("content_scripts", []):
     files.update(cs.get("js", []))
     files.update(cs.get("css", []))
 files.update(m.get("icons", {}).values())
+if m.get("background", {}).get("service_worker"):
+    files.add(m["background"]["service_worker"])
 if m.get("options_page"):
     files.add(m["options_page"])
     html = (root / m["options_page"]).read_text(encoding="utf8")

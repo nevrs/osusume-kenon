@@ -276,14 +276,22 @@ const check = (name, ok, detail) => results.push(`${ok ? "OK" : "NG"}  ${name}${
   // タイムライン温度（D27）: おすすめ・学ぶ前の X・フォロー中の 3 本。各回の始めの 150 件
   t = setup();
   await wait(300);
-  check("温度: 記録が無いときは「まだ比べられません」で、共有のボタンは押せない", t.text("tempHeadline") === "まだ比べられません" && t.d.getElementById("shareX").disabled && t.d.getElementById("shareImg").disabled);
-  check("温度: 記録が無いときは「何件に 1 件」を出さず、先週との比べは件数の足りなさを書く", t.d.getElementById("tempPlain").hidden && t.text("tempWeek").includes("それぞれ 30 件以上") && t.text("tempWeek").includes("0 件・0 件"), t.text("tempWeek"));
+  check("温度: 記録がオフで何も無いときは「測ってみましょう」と「測り始める」を出し、共有のボタンは押せない", t.text("tempHeadline").includes("測ってみましょう") && !t.d.getElementById("tempStart").hidden && t.d.getElementById("tempGo").hidden && t.d.getElementById("shareX").disabled && t.d.getElementById("shareImg").disabled, t.text("tempHeadline"));
+  check("温度: 温度がまだ出ないうちは、7 日ずつの比べの行も出さない", t.d.getElementById("tempWeek").hidden);
+  check("display を指定した欄（アカウントの欄・凡例）も hidden で隠れる（CSS の [hidden] の決まり）", t.d.getElementById("acctBar").hidden && [...t.d.querySelectorAll("style")].some((st) => /\[hidden\]\s*\{\s*display:\s*none\s*!important/.test(st.textContent))); // jsdom は !important の重なりを計算しないので、決まりがあるかだけを見る（見た目は Chrome で確かめた）
+  check("測り始める: 何を残すか（本文・数・@名・この端末だけ・14 日）を添える", ["本文", "いいね", "@名", "外へは送りません", "14 日"].every((w) => t.text("tempStart").includes(w)), t.text("tempStart"));
+  t.click("startRec");
+  await wait(400);
+  check("測り始める: 押すと記録がオンになり、記録の欄のチェックも入る", t.store.recordEnabled === true && t.d.getElementById("recordEnabled").checked);
+  check("測り始める: 押したあとは「測っています」・あと何件か・X を開くリンクを出し、ボタンは消える", t.text("tempHeadline") === "測っています" && t.text("tempSub").includes("あと 30 件") && t.d.getElementById("tempStart").hidden && !t.d.getElementById("tempGo").hidden && t.d.querySelector("#tempGo a").getAttribute("href") === "https://x.com/home", `${t.text("tempHeadline")} / ${t.text("tempSub")}`);
+  check("温度: 記録が無いときは「何件に 1 件」を出さない", t.d.getElementById("tempPlain").hidden);
   check("温度: 基準の日付と件数を、注に書く", t.text("tempFoot").includes("2026-11-01〜2026-11-02") && t.text("tempFoot").includes("460 件") && t.text("tempFoot").includes("押し上げた量ではありません"), t.text("tempFoot"));
   const HOT = { r: 30, p: 0, l: 100, b: 0, v: 3000 }, COLD = { r: 2, p: 0, l: 100, b: 0, v: 3000 };
   const temp = (prefix, feed, n, hot, extra = {}, t0 = now - 600_000) => { const o = {}; for (let i = 0; i < n; i++) o[`rec:${prefix}${i}`] = { feed, ts: t0 + i * 1000, ct: i < hot ? HOT : COLD, ...extra }; return o; };
   t = setup({ ...temp("fa", "for-you", 60, 30), ...temp("fb", "following", 40, 4) });
   await wait(400);
   check("温度: おすすめ 50% が基準（28%）よりはっきり高ければ「熱い」", t.text("tempHeadline").includes("学ぶ前の X より熱い") && t.text("tempSub").includes("おすすめ 50%") && t.text("tempSub").includes("学ぶ前の X 28%") && t.text("tempSub").includes("フォロー中 10%"), `${t.text("tempHeadline")} / ${t.text("tempSub")}`);
+  check("測り始める: 記録がオフでも、温度が出ていればボタンもリンクも出さない", t.d.getElementById("tempStart").hidden && t.d.getElementById("tempGo").hidden);
   check("温度: おすすめ 50% を「およそ 2 件に 1 件」と言い換える", !t.d.getElementById("tempPlain").hidden && t.text("tempPlain").includes("およそ 2 件に 1 件"), t.text("tempPlain"));
   check("温度: その前の 7 日の記録が無ければ、先週との比べは件数の足りなさを書く", t.text("tempWeek").includes("60 件・0 件"), t.text("tempWeek"));
   check("温度: 温度計は 3 本（おすすめ・学ぶ前の X・フォロー中）で、どれにも幅が付く", t.d.querySelectorAll("#tempGauges .gauge").length === 3 && t.d.querySelectorAll("#tempGauges .band").length === 3 && t.text("tempGauges").includes("学ぶ前の X"));

@@ -70,11 +70,15 @@
   .foot strong { color: var(--text); }
 
   /* タイムライン温度・アカウント（D27） */
+  [hidden] { display: none !important; } /* display を指定した欄（.acctbar・.legend など）でも、hidden で隠れるように */
   .acctbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 14px; }
   .acctbar label { align-items: center; }
   #tempGauges .gauge, #tempGauges .scale, #tempAcctRows .gauge { grid-template-columns: 96px 1fr 64px; }
   #tempAcctRows .gauge .name { font-weight: 400; overflow-wrap: anywhere; }
   .share { margin-top: 10px; }
+  .start { margin: 10px 0 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; }
+  .start p { margin: 0 0 8px; }
+  .start button { font-size: 15px; padding: 8px 18px; }
 
   /* 話題の重なり（D23） */
   .topic { display: grid; grid-template-columns: 110px 1fr 92px; gap: 10px; align-items: center; margin: 6px 0; font-size: 13px; }
@@ -125,6 +129,12 @@
   <p class="plain" id="tempPlain" hidden></p>
   <p class="sub" id="tempSub"></p>
   <p class="week" id="tempWeek"></p>
+  <div class="start" id="tempStart" hidden>
+    <p data-i18n="startLead"></p>
+    <p><button type="button" class="primary" id="startRec" data-i18n="startBtn"></button></p>
+    <p class="note" data-i18n="startNote"></p>
+  </div>
+  <p id="tempGo" hidden><a href="https://x.com/home" target="_blank" rel="noopener" data-i18n="openX"></a></p>
   <div id="tempGauges"></div>
   <div id="tempAccts" hidden>
     <p class="note" data-i18n="tempAcctH"></p>
