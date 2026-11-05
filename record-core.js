@@ -38,20 +38,19 @@ function shzAuthorOf(article) {
   return null;
 }
 
-// ログイン中のアカウントの @名（左の列の「プロフィール」のリンク先）。読めなければ null（D27）
+// ログイン中のアカウントの @名（左の列の「プロフィール」のリンク先。無ければ左下のアカウントメニュー）。読めなければ null（D27）
 function shzAccountOf(doc) {
   const m = /^\/([^/?#]+)$/.exec(doc.querySelector(X_DOM.account)?.getAttribute("href") || "");
   if (m && shzIsHandle(m[1])) return m[1];
-  // 「プロフィール」が無い画面では、アカウントメニューのアイコンの印から、無ければ「@名」の文字から読む（幅の狭い画面では文字が出ない）
+  // 「プロフィール」が無い画面では、アカウントメニューのアイコンの印と「@名」の文字から読む。
+  // 印の unknown は、読み込み途中の仮の印のおそれがあるので採らない（推測）。表示名が「@〜」の形でも取り違えないよう、
+  // 文字が出ていれば印と一致するものだけを採り、印が使えなければ最後の「@〜」（表示名の後ろに出る @名）を採る。幅の狭い画面では文字が出ない
   const sw = doc.querySelector(X_DOM.accountSwitcher);
   if (!sw) return null;
-  const av = /^UserAvatar-Container-(.+)$/.exec(sw.querySelector('[data-testid^="UserAvatar-Container-"]')?.getAttribute("data-testid") || "");
-  if (av && shzIsHandle(av[1])) return av[1];
-  for (const s of sw.querySelectorAll("span")) {
-    const t = /^@([^@\s]+)$/.exec((s.textContent || "").trim());
-    if (t && shzIsHandle(t[1])) return t[1];
-  }
-  return null;
+  const av = /^UserAvatar-Container-(.+)$/.exec(sw.querySelector('[data-testid^="UserAvatar-Container-"]')?.getAttribute("data-testid") || "")?.[1];
+  const said = [...sw.querySelectorAll("span")].map((s) => /^@([^@\s]+)$/.exec((s.textContent || "").trim())?.[1]).filter(shzIsHandle);
+  if (shzIsHandle(av) && av !== "unknown" && (!said.length || said.includes(av))) return av;
+  return said.length ? said[said.length - 1] : null;
 }
 
 // 広告（「広告」「Ad」「Promoted」の札が付いた投稿）か。札の場所は未確認なので、本文と引用の外の短い文字だけを見る（推測）

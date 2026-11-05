@@ -15,10 +15,15 @@ const article = (id, text, extra = "") => `<article data-testid="tweet">
   <div role="group" aria-label="1 件の返信、2 件のいいね"></div>
 </article>`;
 
-// ログイン中のアカウントの出し方: 左の列の「プロフィール」（profile）、アカウントメニューのアイコンと文字（switcher）、アイコンだけ（avatar）、文字だけ（text）
-const accountUi = (acct, ui) => !acct ? "" : ui === "profile"
-  ? `<nav><a data-testid="AppTabBar_Profile_Link" href="/${acct}">プロフィール</a></nav>`
-  : `<header><button data-testid="SideNav_AccountSwitcher_Button" aria-label="アカウントメニュー">${ui !== "text" ? `<div data-testid="UserAvatar-Container-${acct}"></div>` : ""}${ui !== "avatar" ? `<span>表示名</span><span>@${acct}</span>` : ""}</button></header>`;
+// ログイン中のアカウントの出し方: 左の列の「プロフィール」（profile）、アカウントメニューのアイコンと文字（switcher）、アイコンだけ（avatar）、文字だけ（text）、
+// 読み込み途中の仮の印 unknown と文字（pending）、仮の印だけ（pendingOnly）、表示名が「@〜」の形（atname はアイコンあり、atnameText は無し）
+const accountUi = (acct, ui) => {
+  if (!acct) return "";
+  if (ui === "profile") return `<nav><a data-testid="AppTabBar_Profile_Link" href="/${acct}">プロフィール</a></nav>`;
+  const avatar = { switcher: acct, avatar: acct, atname: acct, pending: "unknown", pendingOnly: "unknown" }[ui];
+  const name = { switcher: "表示名", text: "表示名", pending: "表示名", atname: "@fake_name", atnameText: "@fake_name" }[ui];
+  return `<header><button data-testid="SideNav_AccountSwitcher_Button" aria-label="アカウントメニュー">${avatar ? `<div data-testid="UserAvatar-Container-${avatar}"></div>` : ""}${name ? `<span>${name}</span><span>@${acct}</span>` : ""}</button></header>`;
+};
 
 const page = (tab, acct, ui) => `<body>
   ${accountUi(acct, ui)}
@@ -255,12 +260,16 @@ const check = (name, ok) => results.push(`${ok ? "OK" : "NG"}  ${name}`);
   check("消したあとで同じ投稿をまた見たら、記録できる", t.store[ka]?.acct === "me_1");
 
   // 左の列に「プロフィール」が無い画面（2026-11-06、作ったばかりのアカウント）: アカウントメニューから読む
-  for (const [ui, acct] of [["switcher", "me_2"], ["avatar", "me_3"], ["text", "me_4"]]) {
+  for (const [ui, acct] of [["switcher", "me_2"], ["avatar", "me_3"], ["text", "me_4"], ["pending", "me_5"], ["atname", "me_6"], ["atnameText", "me_7"]]) {
     t = setup({ enabled: true, acct, ui });
     await wait(150);
     t.see("111"); await wait(5300);
-    check(`「プロフィール」が無くても、アカウントメニュー（${ui}）から @名を読む`, t.store[`rec:${hashOf(`111@${acct}`)}`]?.acct === acct && t.store.acctLast === acct);
+    check(`「プロフィール」が無くても、アカウントメニュー（${ui}）から @名を読む（仮の印 unknown や「@〜」の表示名と取り違えない）`, t.store[`rec:${hashOf(`111@${acct}`)}`]?.acct === acct && t.store.acctLast === acct);
   }
+  t = setup({ enabled: true, acct: "me_8", ui: "pendingOnly" });
+  await wait(150);
+  t.see("111"); await wait(5300);
+  check("仮の印 unknown しか無ければ、@名を付けない（アカウント不明に入れる）", t.store[`rec:${hashOf("111")}`] && !("acct" in t.store[`rec:${hashOf("111")}`]) && !t.store.acctLast);
 
   console.log(results.join("\n"));
   process.exit(results.some((x) => x.startsWith("NG")) ? 1 : 0);

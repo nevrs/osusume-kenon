@@ -512,7 +512,7 @@ function renderSession(session, recs) {
 // アカウント（D27）。いま見ているアカウント（undefined = まだ選んでいない。X で最後に見たアカウント acctLast を初めに選ぶ）
 let viewAcct;
 let acctList = [];
-// @名の分かるアカウントが 2 つ以上あるときだけ、そのアカウントの記録に絞る。1 つ以下なら、アカウント不明（0.16.0 より前）の記録も一緒に数える
+// @名の分かるアカウントが 2 つ以上あるときだけ、そのアカウントの記録に絞る。1 つ以下なら、アカウント不明（0.16.0 より前と、@名を読めなかったもの）の記録も一緒に数える
 // （前の版から上げた人の記録を、上げた直後から「不明」に分けて見えなくしない。2 つ以上なら、不明は選び欄の 1 つになる）
 const shzManyAccts = (accts) => accts.filter((a) => a.acct !== null).length > 1;
 const acctFilter = (recs) => (shzManyAccts(acctList) ? shzOfAcct(recs, viewAcct) : recs);

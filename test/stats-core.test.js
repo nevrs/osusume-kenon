@@ -214,7 +214,7 @@ test("書き出し: どのアカウントで見たかは入れ、投稿者は入
   assert.ok(!("acct" in rows[1]));
 });
 
-test("アカウント: 件数の多い順に並べ、不明（0.16.0 より前の記録）は最後。アカウントごとに絞れる（D27）", () => {
+test("アカウント: 件数の多い順に並べ、不明（0.16.0 より前と、@名を読めなかった記録）は最後。アカウントごとに絞れる（D27）", () => {
   const { shzAccounts, shzOfAcct } = require("../stats-core.js");
   const recs = { a: { acct: "aa" }, b: { acct: "bb" }, c: { acct: "bb" }, d: {}, e: {}, f: {} };
   assert.deepEqual(shzAccounts(recs), [{ acct: "bb", count: 2 }, { acct: "aa", count: 1 }, { acct: null, count: 3 }]);
