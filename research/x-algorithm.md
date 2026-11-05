@@ -85,6 +85,15 @@ Phoenix（Grok 由来の予測モデル）が「この人がこの投稿に各�
    - 対立する投稿を下げる仕組みではない
 10. **共有の人気投稿の一覧**（`home-mixer/util/popular_posts.rs`・`home-mixer/popular_posts_job.rs`、読み込みは `home-mixer/sources/popular_posts_source.rs`）: 24 時間以内の投稿を、**表示数**と経過時間（半減期 8 時間）から出した値で選ぶ。1 作者 5 件まで、全体で 500 件。
     いいね・返信などの反応の数は使わない。読み（推測）: 見られた数だけで選ぶので、炎上して多く見られた投稿もそのまま入りうる
+11. **見ている人の側の手がかり（作ったばかりのアカウントにも効くもの）**（2026-11-06 に読んだ。コミットは同じ）:
+    - **回線（IP アドレス）:** 要求には、見ている人の IP アドレス・端末の ID・ブラウザの種類・国と言語が入る（`home-mixer/models/query.rs`）。並べ方の予測モデル（Phoenix の ranking）は、IP アドレス（IPv4 を数にしたもの）を 2 通りに混ぜて、学習した表を引く（`phoenix/crates/common/xai-recsys/src/util.rs` の `compute_user_ip_hashes`、`phoenix/xrex/configs/xrecsys.py`）。表の大きさは本番の設定で 1000 万（`phoenix/README.md` の表の「IP-address vocab」）。候補を探す側（two-tower）の設定には無い。
+      読み（推測）: 同じ回線のほかのアカウントの反応で学んだ値が、作ったばかりのアカウントの並べ方にも乗る。効くのは並べ替えで、候補を集める段には効かない
+    - **見た跡:** 画像を広げた・10 秒以上ある動画を見た（広告を除く）（`home-mixer/query_hydrators/implicit_engagement_signals_query_hydrator.rs`）、いいね・リポスト・返信・ブックマーク・共有（`explicit_engagement_signals_query_hydrator.rs`）。どれかが 1 件でもあれば、SimClusters（似た反応をする人の集まり）で候補を探す（`home-mixer/sources/simclusters_source.rs` の `has_post_signals`）。
+      読み（推測）: 台本でスクロールしただけでも、自動で再生された動画が「見た」に数えられれば、その界隈の投稿が候補に入る
+    - ほかに、推定の性別（作って 0 日のアカウントは、その場で予測する: `user_inferred_gender_query_hydrator.rs`）、入れているアプリ（`user_installed_apps_query_hydrator.rs`）、属性（`user_demographics_query_hydrator.rs`）、フォローした話題（`followed_grok_topics_query_hydrator.rs`）を読む。初期値はどれもオン（`home-mixer/params/param.rs`）。中身はリポの外
+    - **X のヘルプ（[個人情報の推測に基づくカスタマイズについて](https://help.x.com/ja/about-personalization-across-your-devices)、2026-11-06 に読んだ）:** ログインしたブラウザ・端末はアカウントに登録される。X は主に IP アドレスと時刻から、ブラウザ・端末・アカウントのつながりを推測し、ある端末の情報で別の端末のおすすめを変える。設定「推測される識別情報に基づくカスタマイズ」で止められるのは、ログインに使っていないブラウザ・端末と、似たメールアドレス・電話番号の分。
+      home-mixer の中に、別のアカウントの履歴を読むところは見当たらなかった（`inferred` で出てくるのは推定の性別だけ）。つながりを使う処理はリポの外にあると見る（推測）
+    - 「学ぶ前の X」の基準を取るアカウントは、本人のアカウントと別のブラウザ（プロファイル）・別の回線で作る（ragebait-record.md）
 
 ## まだ読んでいないところ
 
