@@ -41,7 +41,17 @@ function shzAuthorOf(article) {
 // ログイン中のアカウントの @名（左の列の「プロフィール」のリンク先）。読めなければ null（D27）
 function shzAccountOf(doc) {
   const m = /^\/([^/?#]+)$/.exec(doc.querySelector(X_DOM.account)?.getAttribute("href") || "");
-  return m && shzIsHandle(m[1]) ? m[1] : null;
+  if (m && shzIsHandle(m[1])) return m[1];
+  // 「プロフィール」が無い画面では、アカウントメニューのアイコンの印から、無ければ「@名」の文字から読む（幅の狭い画面では文字が出ない）
+  const sw = doc.querySelector(X_DOM.accountSwitcher);
+  if (!sw) return null;
+  const av = /^UserAvatar-Container-(.+)$/.exec(sw.querySelector('[data-testid^="UserAvatar-Container-"]')?.getAttribute("data-testid") || "");
+  if (av && shzIsHandle(av[1])) return av[1];
+  for (const s of sw.querySelectorAll("span")) {
+    const t = /^@([^@\s]+)$/.exec((s.textContent || "").trim());
+    if (t && shzIsHandle(t[1])) return t[1];
+  }
+  return null;
 }
 
 // 広告（「広告」「Ad」「Promoted」の札が付いた投稿）か。札の場所は未確認なので、本文と引用の外の短い文字だけを見る（推測）

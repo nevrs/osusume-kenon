@@ -15,8 +15,13 @@ const article = (id, text, extra = "") => `<article data-testid="tweet">
   <div role="group" aria-label="1 件の返信、2 件のいいね"></div>
 </article>`;
 
-const page = (tab, acct) => `<body>
-  ${acct ? `<nav><a data-testid="AppTabBar_Profile_Link" href="/${acct}">プロフィール</a></nav>` : ""}
+// ログイン中のアカウントの出し方: 左の列の「プロフィール」（profile）、アカウントメニューのアイコンと文字（switcher）、アイコンだけ（avatar）、文字だけ（text）
+const accountUi = (acct, ui) => !acct ? "" : ui === "profile"
+  ? `<nav><a data-testid="AppTabBar_Profile_Link" href="/${acct}">プロフィール</a></nav>`
+  : `<header><button data-testid="SideNav_AccountSwitcher_Button" aria-label="アカウントメニュー">${ui !== "text" ? `<div data-testid="UserAvatar-Container-${acct}"></div>` : ""}${ui !== "avatar" ? `<span>表示名</span><span>@${acct}</span>` : ""}</button></header>`;
+
+const page = (tab, acct, ui) => `<body>
+  ${accountUi(acct, ui)}
   <div role="tablist"><div role="tab" aria-selected="${tab === "おすすめ"}">おすすめ</div><div role="tab" aria-selected="${tab === "フォロー中"}">フォロー中</div></div>
   <div id="tl">
     ${article("111", "怒っている投稿です")}
@@ -29,8 +34,8 @@ const page = (tab, acct) => `<body>
   </div>
 </body>`;
 
-function setup({ url = "https://x.com/home", tab = "おすすめ", stored = {}, enabled = false, acct = null } = {}) {
-  const dom = new JSDOM(page(tab, acct), { url, runScripts: "outside-only", pretendToBeVisual: true });
+function setup({ url = "https://x.com/home", tab = "おすすめ", stored = {}, enabled = false, acct = null, ui = "profile" } = {}) {
+  const dom = new JSDOM(page(tab, acct, ui), { url, runScripts: "outside-only", pretendToBeVisual: true });
   const w = dom.window;
   const store = { ...stored };
   const writes = {}; // キーごとの書き込み回数
@@ -248,6 +253,14 @@ const check = (name, ok) => results.push(`${ok ? "OK" : "NG"}  ${name}`);
   check("「このアカウントの記録を消す」のあと、保存待ちが書き戻されない", !Object.values(t.recs()).some((x) => x.acct === "me_1"));
   t.see("111"); await wait(5300);
   check("消したあとで同じ投稿をまた見たら、記録できる", t.store[ka]?.acct === "me_1");
+
+  // 左の列に「プロフィール」が無い画面（2026-11-06、作ったばかりのアカウント）: アカウントメニューから読む
+  for (const [ui, acct] of [["switcher", "me_2"], ["avatar", "me_3"], ["text", "me_4"]]) {
+    t = setup({ enabled: true, acct, ui });
+    await wait(150);
+    t.see("111"); await wait(5300);
+    check(`「プロフィール」が無くても、アカウントメニュー（${ui}）から @名を読む`, t.store[`rec:${hashOf(`111@${acct}`)}`]?.acct === acct && t.store.acctLast === acct);
+  }
 
   console.log(results.join("\n"));
   process.exit(results.some((x) => x.startsWith("NG")) ? 1 : 0);

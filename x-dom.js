@@ -9,4 +9,7 @@ const X_DOM = {
   actionBar: '[role="group"][aria-label]', // 返信・リポスト・いいね・ブックマーク・表示の数を、まとめて読み上げ用の文に持つ行
   author: '[data-testid="User-Name"]', // 投稿者の表示名と @名の欄（中のリンクが /<@名>）
   account: 'a[data-testid="AppTabBar_Profile_Link"]', // 左の列の「プロフィール」。リンク先が /<ログイン中の @名>（D27）
+  // 左下の「アカウントメニュー」。中のアイコンの data-testid が UserAvatar-Container-<@名>、文字に「@名」。
+  // 2026-11-06 に日本語の画面で確認（作ったばかりのアカウントでは、左の列に「プロフィール」が無かった）
+  accountSwitcher: '[data-testid="SideNav_AccountSwitcher_Button"]',
 };
