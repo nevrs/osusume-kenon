@@ -328,10 +328,11 @@ function renderHeat(recs) {
 const DAY = 86_400_000;
 const LINE_VARS = { r: SHZ_HEAT.replyMin, p: Math.round(SHZ_TEMP_LINE * 100), n: SHZ_RUN_FIRST, gap: SHZ_RUN_GAP_MS / 60_000 }; // 返信が多めの線の数（文に直書きしない）
 const acctName = (a) => (a === null ? shzT("acctUnknown") : `@${a}`);
+const baseSpan = (B) => (B.from === B.to ? B.from : shzT("baseSpan", { from: B.from, to: B.to })); // 基準を数えた日（1 日なら日付だけ）
 let tempNow = null; // 共有に使う、いま出しているおすすめの温度 { a, b, n }。比べられないときは null
 
-// 1 本の温度計（塗り 1 色と、90% の幅）。件数が足りなければ「—」
-function tempRow(box, name, hot, n, color, max) {
+// 1 本の温度計（塗り 1 色と、90% の幅）。件数が足りなければ「—」。showN が false なら件数を添えない（基準の件数はヘルプにだけ書く。D30）
+function tempRow(box, name, hot, n, color, max, showN = true) {
   const row = el("div", "gauge"), track = el("div", "track"), ok = n >= SHZ_MIN_N;
   row.append(el("span", "name", name));
   const W = (x) => `${Math.min(100, (x / max) * 100)}%`;
@@ -345,7 +346,7 @@ function tempRow(box, name, hot, n, color, max) {
     track.append(b);
   }
   const val = el("span", "val", ok ? pct1(hot / n) : "—");
-  val.append(el("small", "", shzT("tempN", { n })));
+  val.append(el("small", "", showN ? shzT("tempN", { n }) : " ")); // 件数を出さない棒も、行の高さをそろえる
   row.append(track, val);
   box.append(row);
 }
@@ -372,7 +373,9 @@ function renderTemp(recs, allRecs, accts, recording) {
   const t = shzTempTally(recs, from), A = t["for-you"], F = t.following;
   const h = $("tempHeadline"), sub = $("tempSub"), box = $("tempGauges");
   h.className = "headline";
-  setRich($("tempFoot"), shzT("tempFoot", { from: B.from, to: B.to, n: B.n }));
+  setRich($("tempFoot"), shzT("tempFoot"));
+  // 基準の細かいこと（データ・件数・日数）は、ヘルプにだけ書く（D30。温度の欄は「目安」と「押し上げた量ではない」だけ）
+  setRich($("helpBase"), shzT("helpBase", { n: B.n, days: Math.round((Date.parse(B.to) - Date.parse(B.from)) / DAY) + 1, span: baseSpan(B) }));
   $("tempDef").textContent = shzT("tempDef", LINE_VARS);
   const c = shzCompareCounts(A.hot, A.n, B.hot, B.n);
   tempNow = c.verdict === "need" ? null : { a: c.a, b: c.b, n: A.n };
@@ -393,12 +396,12 @@ function renderTemp(recs, allRecs, accts, recording) {
     sub.textContent = shzT("tempSub", { a: pct1(c.a), b: pct1(c.b) }) + (F.n >= SHZ_MIN_N ? shzT("tempSubFl", { c: pct1(F.hot / F.n) }) : "");
   }
   // 目盛りは 3 本（おすすめ・基準・フォロー中）と、アカウントどうしの行で共通。幅の上の端まで入るよう、10% 刻みで切り上げる
-  const rows = [[shzT("feedForYou"), A.hot, A.n, "var(--fy)"], [shzT("tempBase"), B.hot, B.n, "var(--base)"], [shzT("feedFollowing"), F.hot, F.n, "var(--fl)"]];
+  const rows = [[shzT("feedForYou"), A.hot, A.n, "var(--fy)"], [shzT("tempBase"), B.hot, B.n, "var(--base)", false], [shzT("feedFollowing"), F.hot, F.n, "var(--fl)"]];
   const others = shzManyAccts(accts) ? accts.map(({ acct }) => [acctName(acct), shzTempTally(shzOfAcct(allRecs, acct), from)["for-you"]]) : [];
   const tops = [...rows.map(([, k, n]) => (n >= SHZ_MIN_N ? shzInterval(k, n)[1] : 0)), ...others.map(([, o]) => (o.n >= SHZ_MIN_N ? shzInterval(o.hot, o.n)[1] : 0))];
   const max = Math.max(0.1, Math.ceil(Math.max(...tops) * 10) / 10);
   box.replaceChildren();
-  for (const [name, k, n, color] of rows) tempRow(box, name, k, n, color, max);
+  for (const [name, k, n, color, showN] of rows) tempRow(box, name, k, n, color, max, showN);
   const scale = el("div", "scale"), ticks = el("span");
   for (const v of [0, max / 2, max]) ticks.append(el("span", "", pctAxis(v)));
   scale.append(el("span"), ticks, el("span"));
@@ -433,7 +436,7 @@ function shareImage() {
     g.fillStyle = "#1d2a35"; g.font = font(30, true); g.fillText(pct1(v), 996, y + 30);
   };
   bar(400, shzT("imgForYou"), tempNow.a, "#c9533d");
-  bar(490, shzT("imgBase", { from: B.from, to: B.to }), tempNow.b, "#8b939b");
+  bar(490, shzT("imgBase"), tempNow.b, "#8b939b");
   g.fillStyle = "#66727e"; g.font = font(22);
   g.fillText(shzT("imgDef", LINE_VARS), 72, 560);
   g.fillText(shzT("imgBaseNote"), 72, 590);

@@ -117,7 +117,7 @@ function shzTopicOverlap(tt, sims = 400) {
 }
 
 // ---- アカウント（D27） ----
-// どのアカウントで見た記録か。0.16.0 より前の記録には無い（null。設定画面では「アカウント不明」）
+// どのアカウントで見た記録か。0.16.0 より前の記録と、@名を読めなかった記録には無い（null。設定画面では「アカウント不明」）
 const shzAcctOf = (r) => (typeof r.acct === "string" ? r.acct : null);
 // 記録のあるアカウントと件数。多い順、不明（null）は最後
 function shzAccounts(records) {
