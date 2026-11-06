@@ -368,13 +368,14 @@ function renderTempWeek(recs) {
 }
 
 function renderTemp(recs, allRecs, accts, recording) {
-  const B = shzBaseline(), from = Date.now() - 14 * DAY;
+  const B0 = shzBaseline(), from = Date.now() - 14 * DAY;
+  const B = shzTempBaseFor(recs, B0, from); // 基準を、このおすすめの大きさ・かなの有無の混ざり方にそろえる（D31）
   const t = shzTempTally(recs, from), A = t["for-you"], F = t.following;
   const h = $("tempHeadline"), sub = $("tempSub"), box = $("tempGauges");
   h.className = "headline";
   setRich($("tempFoot"), shzT("tempFoot"));
   // 基準のデータ（どこで数えたかと件数）は、ヘルプにだけ書く（D30。温度の欄は「目安」と「押し上げた量ではない」だけ）
-  setRich($("helpBase"), shzT("helpBase", { n: B.n }));
+  setRich($("helpBase"), shzT("helpBase", { n: B0.n }));
   $("tempDef").textContent = shzT("tempDef", LINE_VARS);
   const c = shzCompareCounts(A.hot, A.n, B.hot, B.n);
   tempNow = c.verdict === "need" ? null : { a: c.a, b: c.b, n: A.n };
@@ -420,7 +421,7 @@ $("shareX").addEventListener("click", () => {
 });
 // 画像（1200×630）: おすすめの温度と基準の 2 本の棒。アカウント名は入れない
 function shareImage() {
-  const B = shzBaseline(), W = 1200, H = 630, cv = document.createElement("canvas");
+  const W = 1200, H = 630, cv = document.createElement("canvas");
   cv.width = W; cv.height = H;
   const g = cv.getContext("2d"), font = (px, bold) => `${bold ? 700 : 400} ${px}px system-ui, sans-serif`;
   g.fillStyle = "#f4f6f8"; g.fillRect(0, 0, W, H);

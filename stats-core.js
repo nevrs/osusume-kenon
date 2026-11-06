@@ -134,22 +134,61 @@ function shzOfAcct(records, acct) {
 // 「回」: 同じ feed の記録の時刻が SHZ_RUN_GAP_MS 以上空いたら、別の回（開き直したあと）とみなす。基準（baseline.js）と同じ数え方
 const SHZ_RUN_GAP_MS = 3 * 60_000;
 const SHZ_RUN_FIRST = 150; // 各回の始めの何件で比べるか（上のほうほど「返信が多め」が多いので、件数をそろえる。research/ragebait-record.md）
-// 期間 [fromTs, toTs] の、反応の数（ct）を読めた記録を feed ごとに、各回の始めの first 件だけ数える。{ "for-you": { n, hot, runs }, following: {...} }
-// hot = 返信が多め（line。初めは SHZ_TEMP_LINE の 3%）
-function shzTempTally(records, fromTs = 0, toTs = Infinity, { first = SHZ_RUN_FIRST, gapMs = SHZ_RUN_GAP_MS, line } = {}) {
-  const out = Object.fromEntries(SHZ_FEEDS.map((f) => [f, { n: 0, hot: 0, runs: 0 }]));
-  for (const f of SHZ_FEEDS) {
-    const rs = Object.values(records).filter((r) => r.feed === f && r.ct && typeof r.ts === "number" && r.ts >= fromTs && r.ts <= toTs).sort((a, b) => a.ts - b.ts);
-    let prev = -Infinity, k = 0;
-    for (const r of rs) {
-      if (r.ts - prev >= gapMs) { out[f].runs++; k = 0; }
-      prev = r.ts;
-      if (k++ >= first) continue;
-      out[f].n++;
-      if (shzHeavy(r.ct, line)) out[f].hot++;
-    }
+// 期間 [fromTs, toTs] の、feed の反応の数（ct）を読めた記録から、各回の始めの first 件を時刻の順に選ぶ。返す配列の runs に回の数
+function shzTempPicked(records, feed, fromTs = 0, toTs = Infinity, { first = SHZ_RUN_FIRST, gapMs = SHZ_RUN_GAP_MS } = {}) {
+  const rs = Object.values(records).filter((r) => r.feed === feed && r.ct && typeof r.ts === "number" && r.ts >= fromTs && r.ts <= toTs).sort((a, b) => a.ts - b.ts);
+  const out = [];
+  let prev = -Infinity, k = 0, runs = 0;
+  for (const r of rs) {
+    if (r.ts - prev >= gapMs) { runs++; k = 0; }
+    prev = r.ts;
+    if (k++ < first) out.push(r);
   }
+  out.runs = runs;
   return out;
+}
+// 期間 [fromTs, toTs] の記録を feed ごとに、各回の始めの first 件だけ数える。{ "for-you": { n, hot, runs }, following: {...} }
+// hot = 返信が多め（line。初めは SHZ_TEMP_LINE の 3%）
+function shzTempTally(records, fromTs = 0, toTs = Infinity, { first, gapMs, line } = {}) {
+  return Object.fromEntries(SHZ_FEEDS.map((f) => {
+    const p = shzTempPicked(records, f, fromTs, toTs, { first, gapMs });
+    return [f, { n: p.length, hot: p.filter((r) => shzHeavy(r.ct, line)).length, runs: p.runs }];
+  }));
+}
+
+// ---- 温度の基準を、その人のおすすめの混ざり方にそろえる（D31） ----
+// 「返信が多め」の割合は、投稿の大きさ（いいねの数）と、かなを含むか（多くは外国語の投稿か）で大きく変わる（research/ragebait-record.md）。
+// 基準（baseline.js）は組ごとの件数を持ち、比べる側のおすすめと同じ混ざり方で重みづけし直す。基準の値は新しいアカウントのものだけで、合わせるのはこの端末の記録
+const SHZ_TEMP_BANDS = [100, 1000, 10000]; // いいねの帯の境（100 未満・100〜1 千・1 千〜1 万・1 万以上）
+const SHZ_KANA = /[\u3041-\u3096\u30a1-\u30fa]/;
+// 投稿の組: { band: いいねの帯 0〜3, kana: かなを含むか。本文が無い（消した）記録は null }。英語の画面で読めなかったいいねは 0 とみなす（shzHeavy と同じ）
+function shzTempGroup(r) {
+  const l = r.ct?.l ?? 0;
+  let band = 0;
+  while (band < SHZ_TEMP_BANDS.length && l >= SHZ_TEMP_BANDS[band]) band++;
+  return { band, kana: typeof r.text === "string" && r.text ? SHZ_KANA.test(r.text) : null };
+}
+// 基準 B（{ n, hot, groups }）を、期間のおすすめの混ざり方にそろえた { n, hot, mixed }。hot は小数になりうる。
+// groups[帯] = [かな無の件数, うち返信が多め, かな有の件数, うち返信が多め]。かなの有無が分からない投稿は帯の両方を合わせた割合、件数 0 の組は基準全体の割合を当てる。
+// n は、そろえた割合が実質何件分の確かさか（組ごとのぶれを重みで足したものから逆に求める。基準の件数を超えない）。偏ったおすすめほど、
+// 少ない組に重みが乗って確かさが下がるので、基準の件数のまま比べると、はっきりした差を言いすぎる。ぶれは 0 件・全件の組でも 0 にならないよう (h+0.5)/(n+1) で見積もり、
+// 実質の件数もその値の重み付きの平均から求める（物差しをそろえると、組が 1 つならその組の件数になり、いちばん少ない組の件数を下回らない）。
+// 組は互いに独立だとみなす（かなの有無が分からない組・件数 0 の組は、ほかの組と同じ投稿を含むので、確かさを少し大きめに見る）。
+// groups の無い基準や、おすすめが SHZ_MIN_N 件に満たないとき（温度をまだ出さないとき）は、基準そのまま
+function shzTempBaseFor(records, B, fromTs = 0, toTs = Infinity) {
+  const picked = shzTempPicked(records, "for-you", fromTs, toTs);
+  if (!B.groups || picked.length < SHZ_MIN_N) return { n: B.n, hot: B.hot, mixed: false };
+  const cellOf = ({ band, kana }) => {
+    const [nn, hn, nk, hk] = B.groups[band], n = kana === null ? nn + nk : kana ? nk : nn, h = kana === null ? hn + hk : kana ? hk : hn;
+    return n ? { key: `${band}:${kana}`, n, h } : { key: "all", n: B.n, h: B.hot };
+  };
+  const cells = new Map();
+  for (const r of picked) { const c = cellOf(shzTempGroup(r)); (cells.get(c.key) ?? cells.set(c.key, { ...c, k: 0 }).get(c.key)).k++; }
+  let p = 0, pq = 0, v = 0;
+  for (const { n, h, k } of cells.values()) { const w = k / picked.length, q = (h + 0.5) / (n + 1); p += w * (h / n); pq += w * q; v += (w * w * q * (1 - q)) / n; }
+  // 浮動小数の丸めで、組の件数（SHZ_MIN_N ちょうどの組など）をわずかに下回らないよう、小数 6 桁で丸める
+  const nEff = Math.min(B.n, Math.round(((pq * (1 - pq)) / v) * 1e6) / 1e6);
+  return { n: nEff, hot: p * nEff, mixed: true };
 }
 
 // ---- 目立つ投稿（D25。X が前に出す投稿の形を見るための目安） ----
@@ -211,4 +250,4 @@ function shzExportRows(records) {
     .map((r) => ({ feed: r.feed, day: shzDay(r.ts), text: r.text, ...(shzAcctOf(r) ? { acct: r.acct } : {}), ...(r.auto ? { auto: 1 } : {}), ...(shzIsJudged(r) ? { g: r.g, c: r.c, x: r.x, jv: r.jv } : {}), ...(typeof r.tp === "string" ? { tp: r.tp, tv: r.tv } : {}), ...(r.ct ? { ct: r.ct } : {}), ...(typeof r.age === "number" ? { age: r.age } : {}) }));
 }
 
-if (typeof module !== "undefined") module.exports = { shzAcctOf, shzAccounts, shzOfAcct, SHZ_RUN_GAP_MS, SHZ_RUN_FIRST, shzTempTally, SHZ_MIN_N, SHZ_GOOD_N, SHZ_TOPIC_MIN, SHZ_FEEDS, shzInterval, shzCompare, shzCompareCounts, shzHeatTally, shzTopicTally, shzTopicOverlap, shzTally, shzTallyByDay, shzShare, shzVersions, shzSessionProgress, shzSample, shzExportRows };
+if (typeof module !== "undefined") module.exports = { shzAcctOf, shzAccounts, shzOfAcct, SHZ_RUN_GAP_MS, SHZ_RUN_FIRST, shzTempPicked, shzTempTally, SHZ_TEMP_BANDS, shzTempGroup, shzTempBaseFor, SHZ_MIN_N, SHZ_GOOD_N, SHZ_TOPIC_MIN, SHZ_FEEDS, shzInterval, shzCompare, shzCompareCounts, shzHeatTally, shzTopicTally, shzTopicOverlap, shzTally, shzTallyByDay, shzShare, shzVersions, shzSessionProgress, shzSample, shzExportRows };

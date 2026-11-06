@@ -248,4 +248,47 @@ test("基準（baseline.js）: 日付つきで、いちばん新しいものを�
   assert.ok(SHZ_BASELINES.length >= 1);
   for (const b of SHZ_BASELINES) { assert.match(b.from, /^\d{4}-\d{2}-\d{2}$/); assert.ok(b.hot <= b.n && b.n >= 30); }
   assert.equal(shzBaseline(), SHZ_BASELINES[SHZ_BASELINES.length - 1]);
+  // 組ごとの件数（D31）は、足すと全体の件数と返信が多めの件数になる。件数のある組は SHZ_MIN_N 件以上（そろえた基準の実質の件数は、いちばん少ない組を下回らないので、温度が「まだ出ない」に化けない）
+  const { SHZ_MIN_N } = require("../stats-core.js");
+  for (const b of SHZ_BASELINES.filter((x) => x.groups)) {
+    assert.equal(b.groups.length, 4);
+    for (const [nn, , nk] of b.groups) for (const n of [nn, nk]) assert.ok(n === 0 || n >= SHZ_MIN_N, `組の件数 ${n}`);
+    assert.equal(b.groups.flat().filter((_, i) => i % 2 === 0).reduce((a, x) => a + x, 0), b.n);
+    assert.equal(b.groups.flat().filter((_, i) => i % 2 === 1).reduce((a, x) => a + x, 0), b.hot);
+  }
+});
+
+test("温度の基準: いいねの帯とかなの有無で組に分け、おすすめの混ざり方で重みづけし直す（D31）", () => {
+  const { shzTempGroup, shzTempBaseFor } = require("../stats-core.js");
+  assert.deepEqual(shzTempGroup({ ct: { l: 99 }, text: "plain" }), { band: 0, kana: false });
+  assert.deepEqual(shzTempGroup({ ct: { l: 100 }, text: "かなの文" }), { band: 1, kana: true });
+  assert.deepEqual(shzTempGroup({ ct: { l: 10000 }, text: "漢字文" }), { band: 3, kana: false }); // かなの無い日本語の文は、かな無に入る
+  assert.deepEqual(shzTempGroup({ ct: { l: null } }), { band: 0, kana: null }); // 読めないいいねは 0、本文が無ければかなは分からない
+  // 帯 0: かな無 10 件中 5 件・かな有 10 件中 1 件。帯 1〜3 は件数 0（基準全体の割合 6/20 を当てる）
+  const B = { n: 20, hot: 6, groups: [[10, 5, 10, 1], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]] };
+  const fy = (k, extra) => Object.fromEntries(Array.from({ length: k }, (_, i) => [`${extra.p}${i}`, { feed: "for-you", ts: noon + i * 1000, ct: { r: 0, l: extra.l }, text: extra.text }]));
+  const near = (x, y) => assert.ok(Math.abs(x - y) < 1e-9, `${x} ≠ ${y}`);
+  const rate = (x) => x.hot / x.n;
+  // かな無だけ → 50%、かな有だけ → 10%、半々 → 30%、本文なし → 帯の両方を合わせた 30%、組の件数が 0 → 全体の 30%
+  near(rate(shzTempBaseFor(fy(30, { p: "a", l: 5, text: "plain" }), B)), 0.5);
+  near(rate(shzTempBaseFor(fy(30, { p: "a", l: 5, text: "かな" }), B)), 0.1);
+  near(rate(shzTempBaseFor({ ...fy(15, { p: "a", l: 5, text: "plain" }), ...fy(15, { p: "b", l: 5, text: "かな" }) }, B)), 0.3);
+  near(rate(shzTempBaseFor(fy(30, { p: "a", l: 5 }), B)), 0.3);
+  near(rate(shzTempBaseFor(fy(30, { p: "a", l: 500, text: "plain" }), B)), 0.3);
+  assert.equal(shzTempBaseFor(fy(30, { p: "a", l: 5, text: "plain" }), B).mixed, true);
+  // 実質の件数: 組が 1 つなら、割合が端に寄っていても、その組の件数（10）。2 つの組に分かれれば、いちばん少ない組より多く、基準の件数（1000）より少ない
+  const B2 = { n: 1000, hot: 300, groups: [[10, 1, 10, 9], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]] };
+  assert.equal(shzTempBaseFor(fy(30, { p: "a", l: 5, text: "plain" }), B2).n, 10);
+  assert.equal(shzTempBaseFor(fy(30, { p: "a", l: 5, text: "かな" }), B2).n, 10);
+  // SHZ_MIN_N ちょうどの組に、おすすめが何件乗っても、実質の件数は SHZ_MIN_N を下回らない（丸めで 29.999… にならない）
+  const B3 = { n: 713, hot: 238, groups: [[30, 3, 683, 235], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]] };
+  for (let k = 30; k <= 150; k++) assert.ok(shzTempBaseFor(fy(k, { p: "a", l: 5, text: "plain" }), B3).n >= 30, `${k} 件`);
+  const two = shzTempBaseFor({ ...fy(15, { p: "a", l: 5, text: "plain" }), ...fy(15, { p: "b", l: 5, text: "かな" }) }, B2).n;
+  assert.ok(two > 10 && two < 1000, `${two}`);
+  assert.equal(shzTempBaseFor({ ...fy(15, { p: "a", l: 5, text: "plain" }), ...fy(15, { p: "b", l: 5, text: "かな" }) }, B).n, 20); // 基準の件数を超えない
+  // 0 件の組だけでも、ぶれを 0 とみなさない（件数が無限にならない）
+  assert.ok(Number.isFinite(shzTempBaseFor(fy(30, { p: "a", l: 5, text: "plain" }), { n: 20, hot: 0, groups: [[20, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]] }).n));
+  // おすすめが 30 件に満たない・組の無い基準なら、そのまま
+  assert.deepEqual(shzTempBaseFor(fy(29, { p: "a", l: 5, text: "plain" }), B), { n: 20, hot: 6, mixed: false });
+  assert.deepEqual(shzTempBaseFor(fy(30, { p: "a", l: 5, text: "plain" }), { n: 20, hot: 6 }), { n: 20, hot: 6, mixed: false });
 });

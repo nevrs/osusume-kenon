@@ -175,7 +175,7 @@ const SHZ_I18N = {
     help3: "① 画面に 0.5 秒以上出た投稿の本文を、端末の中に残す。② AI が本文を読み、集団の人々をみな同じ性質のように語る言葉・「見下し」（人や集団を侮辱する）・「排除」（追い出す・権利を奪う・黙らせることを求める）を探す。集団の言葉と見下しが両方あれば「ひとまとめの見下し」とする（集団の名前が出てくるだけでは数えない）。主張の正しさや立場は問わず、言葉の形だけを見る。③ どれかに当てはまる投稿の割合を、「おすすめ」と「フォロー中」で比べる。",
     help4: "集団をまとめて見下す → 排除する は、偏見が言葉から行いへ進む段として読めます。この拡張は、その段の言葉がどれだけ流れてくるかを見ます。",
     help5: "AI は誤ります。ひとまとめにすることを批判している文や、正当な批判を当てはまると読むこともあります。「ひとまとめの見下し」は、言いすぎを減らす代わりに、見落としが多くなっています。数字は目安で、2 つの画面の違いを示すだけです。",
-    helpBase: "**温度の基準:** 比べている「学ぶ前の X」は、新しく作ったアカウント（日本語の画面）のおすすめ欄で数えた値です（サンプル数 {n} 件）。返信が多い投稿には、言い合いのほかに質問や問いかけも入ります。",
+    helpBase: "**温度の基準:** 比べている「学ぶ前の X」は、新しく作ったアカウント（日本語の画面）のおすすめ欄で数えた値です（サンプル数 {n} 件）。あなたのおすすめと、いいねの数・かなの有無の混ざり方をそろえて比べています。返信が多い投稿には、言い合いのほかに質問や問いかけも入ります。",
   },
   en: {
     title: "Timeline Checker for X settings",
@@ -349,7 +349,7 @@ const SHZ_I18N = {
     help3: "① Keep the text of posts that stayed on screen for 0.5 s or more, on this device. ② The AI reads it and looks for words describing a group of people as all sharing a trait, \"contempt\" (insulting people or groups) and \"exclusion\" (demanding that people be driven out, stripped of rights or silenced). When both group words and contempt are present, it counts as \"group contempt\" (merely naming a group does not count). It ignores whether a claim is right or which side it is on, and looks only at the form of the words. ③ The share of posts matching any of them is compared between \"For you\" and \"Following\".",
     help4: "Holding a whole group in contempt → excluding it can be read as steps by which prejudice moves from words toward action. This extension looks at how much language at those steps reaches you.",
     help5: "The AI makes mistakes; it may flag a post that criticizes lumping, or fair criticism. \"Group contempt\" trades fewer false alarms for more misses. The numbers are a rough guide and only show the difference between the two feeds.",
-    helpBase: "**Temperature baseline:** \"X before it learns you\" was counted on the For you feed of a newly created account (Japanese interface). Sample size: {n} posts. Reply-heavy posts include questions and prompts as well as arguments.",
+    helpBase: "**Temperature baseline:** \"X before it learns you\" was counted on the For you feed of a newly created account (Japanese interface). Sample size: {n} posts. The baseline is adjusted to match your For you feed's mix of like counts and of posts with or without Japanese kana. Reply-heavy posts include questions and prompts as well as arguments.",
   },
 };
 
