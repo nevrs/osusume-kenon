@@ -328,7 +328,6 @@ function renderHeat(recs) {
 const DAY = 86_400_000;
 const LINE_VARS = { r: SHZ_HEAT.replyMin, p: Math.round(SHZ_TEMP_LINE * 100), n: SHZ_RUN_FIRST, gap: SHZ_RUN_GAP_MS / 60_000 }; // 返信が多めの線の数（文に直書きしない）
 const acctName = (a) => (a === null ? shzT("acctUnknown") : `@${a}`);
-const baseSpan = (B) => (B.from === B.to ? B.from : shzT("baseSpan", { from: B.from, to: B.to })); // 基準を数えた日（1 日なら日付だけ）
 let tempNow = null; // 共有に使う、いま出しているおすすめの温度 { a, b, n }。比べられないときは null
 
 // 1 本の温度計（塗り 1 色と、90% の幅）。件数が足りなければ「—」。showN が false なら件数を添えない（基準の件数はヘルプにだけ書く。D30）
@@ -374,8 +373,8 @@ function renderTemp(recs, allRecs, accts, recording) {
   const h = $("tempHeadline"), sub = $("tempSub"), box = $("tempGauges");
   h.className = "headline";
   setRich($("tempFoot"), shzT("tempFoot"));
-  // 基準の細かいこと（データ・件数・日数）は、ヘルプにだけ書く（D30。温度の欄は「目安」と「押し上げた量ではない」だけ）
-  setRich($("helpBase"), shzT("helpBase", { n: B.n, days: Math.round((Date.parse(B.to) - Date.parse(B.from)) / DAY) + 1, span: baseSpan(B) }));
+  // 基準のデータ（どこで数えたかと件数）は、ヘルプにだけ書く（D30。温度の欄は「目安」と「押し上げた量ではない」だけ）
+  setRich($("helpBase"), shzT("helpBase", { n: B.n }));
   $("tempDef").textContent = shzT("tempDef", LINE_VARS);
   const c = shzCompareCounts(A.hot, A.n, B.hot, B.n);
   tempNow = c.verdict === "need" ? null : { a: c.a, b: c.b, n: A.n };

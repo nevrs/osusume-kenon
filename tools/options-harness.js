@@ -286,12 +286,12 @@ const check = (name, ok, detail) => results.push(`${ok ? "OK" : "NG"}  ${name}${
   check("測り始める: 押したあとは「測っています」・あと何件か・X を開くリンクを出し、ボタンは消える", t.text("tempHeadline") === "測っています" && t.text("tempSub").includes("あと 30 件") && t.d.getElementById("tempStart").hidden && !t.d.getElementById("tempGo").hidden && t.d.querySelector("#tempGo a").getAttribute("href") === "https://x.com/home", `${t.text("tempHeadline")} / ${t.text("tempSub")}`);
   check("温度: 記録が無いときは「何件に 1 件」を出さない", t.d.getElementById("tempPlain").hidden);
   check("温度: 欄の注は「目安」と「押し上げた量ではない」だけで、基準の件数・日付は書かない（D30）", t.text("tempFoot").includes("目安") && t.text("tempFoot").includes("押し上げた量ではありません") && !/\d+ 件|2026-/.test(t.text("tempFoot")), t.text("tempFoot"));
-  check("ヘルプ: 基準のデータ（学ぶ前の X のおすすめ欄）・サンプル数・サンプル日数を書く（D30）", ["おすすめ欄", "サンプル数 571 件", "サンプル日数 1 日", "2026-11-06"].every((w) => t.text("helpBase").includes(w)), t.text("helpBase"));
+  check("ヘルプ: 基準のデータは、学ぶ前の X のおすすめ欄とサンプル数だけを書く（D30）", ["おすすめ欄", "サンプル数 713 件"].every((w) => t.text("helpBase").includes(w)) && !/サンプル日数|2026-|1 つのアカウント/.test(t.text("helpBase")), t.text("helpBase"));
   const HOT = { r: 30, p: 0, l: 100, b: 0, v: 3000 }, COLD = { r: 2, p: 0, l: 100, b: 0, v: 3000 };
   const temp = (prefix, feed, n, hot, extra = {}, t0 = now - 600_000) => { const o = {}; for (let i = 0; i < n; i++) o[`rec:${prefix}${i}`] = { feed, ts: t0 + i * 1000, ct: i < hot ? HOT : COLD, ...extra }; return o; };
   t = setup({ ...temp("fa", "for-you", 60, 30), ...temp("fb", "following", 40, 4) });
   await wait(400);
-  check("温度: おすすめ 50% が基準（34%）よりはっきり高ければ「熱い」", t.text("tempHeadline").includes("学ぶ前の X より熱い") && t.text("tempSub").includes("おすすめ 50%") && t.text("tempSub").includes("学ぶ前の X 34%") && t.text("tempSub").includes("フォロー中 10%"), `${t.text("tempHeadline")} / ${t.text("tempSub")}`);
+  check("温度: おすすめ 50% が基準（33%）よりはっきり高ければ「熱い」", t.text("tempHeadline").includes("学ぶ前の X より熱い") && t.text("tempSub").includes("おすすめ 50%") && t.text("tempSub").includes("学ぶ前の X 33%") && t.text("tempSub").includes("フォロー中 10%"), `${t.text("tempHeadline")} / ${t.text("tempSub")}`);
   check("測り始める: 記録がオフでも、温度が出ていればボタンもリンクも出さない", t.d.getElementById("tempStart").hidden && t.d.getElementById("tempGo").hidden);
   check("温度: おすすめ 50% を「およそ 2 件に 1 件」と言い換える", !t.d.getElementById("tempPlain").hidden && t.text("tempPlain").includes("およそ 2 件に 1 件"), t.text("tempPlain"));
   check("温度: その前の 7 日の記録が無ければ、先週との比べは件数の足りなさを書く", t.text("tempWeek").includes("60 件・0 件"), t.text("tempWeek"));
@@ -302,7 +302,7 @@ const check = (name, ok, detail) => results.push(`${ok ? "OK" : "NG"}  ${name}${
   t.click("shareX");
   await wait(50);
   const url = t.opened[0] || "";
-  check("X で共有: X の投稿画面を開くだけで、文に温度・基準・ハッシュタグ・目安が入る", url.startsWith("https://x.com/intent/post?text=") && decodeURIComponent(url).includes("50%") && decodeURIComponent(url).includes("34%") && decodeURIComponent(url).includes("#タイムライン温度") && decodeURIComponent(url).includes("目安") && t.text("saved").includes("投稿するかは、あなたが決めて"), decodeURIComponent(url));
+  check("X で共有: X の投稿画面を開くだけで、文に温度・基準・ハッシュタグ・目安が入る", url.startsWith("https://x.com/intent/post?text=") && decodeURIComponent(url).includes("50%") && decodeURIComponent(url).includes("33%") && decodeURIComponent(url).includes("#タイムライン温度") && decodeURIComponent(url).includes("目安") && t.text("saved").includes("投稿するかは、あなたが決めて"), decodeURIComponent(url));
   // 先週との比べ: この 7 日（50%）とその前の 7 日（10%）。7 日より前は 10 日前に置く
   t = setup({ ...temp("wa", "for-you", 60, 30), ...temp("wb", "for-you", 60, 6, {}, now - 10 * 86_400_000) });
   await wait(400);
