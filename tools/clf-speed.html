@@ -1,0 +1,43 @@
+<!doctype html><meta charset="utf-8"><title>speed</title>
+<!--
+  小さな分類器の速さの試し（DESIGN.md D32 の ①、research/classifier-record.md）。外のサイトからは何も読まない。
+  置き方（どれもリポの外の作業用フォルダに。このファイルは index.html として置く）:
+    app/   … npm install @huggingface/transformers@4.3.1
+    model/keisuke-miyako/modernbert-ja-30m-onnx-int8/   … config.json・tokenizer.json・tokenizer_config.json・special_tokens_map.json、onnx/model_quantized.onnx
+    eval/  … tools/eval の targets.json・groups.json・neutral.json
+  python -m http.server <番号> --bind 127.0.0.1 で配り、Chrome で開く。?v=.asyncify で、初めの設定が選ぶ版の動かす部品で測る
+-->
+<script type="importmap">{"imports":{
+"onnxruntime-web/webgpu":"./app/node_modules/onnxruntime-web/dist/ort.webgpu.min.mjs",
+"onnxruntime-common":"./app/node_modules/onnxruntime-common/dist/esm/index.js",
+"@huggingface/transformers":"./app/node_modules/@huggingface/transformers/dist/transformers.web.js"}}</script>
+<pre id="out">running…</pre>
+<script type="module">
+import { env, AutoTokenizer, AutoModel } from "@huggingface/transformers";
+const out = document.getElementById("out"), log = (...a) => { out.textContent += "\n" + a.join(" "); console.log("[spd]", ...a); };
+const variant = new URLSearchParams(location.search).get("v") || ""; // "" = 素の CPU 版 / ".asyncify"
+env.localModelPath = "./model/"; env.allowLocalModels = true; env.allowRemoteModels = false; env.useBrowserCache = false;
+env.backends.onnx.wasm.wasmPaths = { mjs: `./app/node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded${variant}.mjs`, wasm: `./app/node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded${variant}.wasm` };
+try {
+  const ID = "keisuke-miyako/modernbert-ja-30m-onnx-int8";
+  const texts = (await Promise.all(["targets", "groups", "neutral"].map((f) => fetch(`./eval/${f}.json`).then((r) => r.json())))).flatMap((d) => d.posts.map((p) => p.text));
+  let t0 = performance.now();
+  const tok = await AutoTokenizer.from_pretrained(ID);
+  const model = await AutoModel.from_pretrained(ID, { dtype: "q8", device: "wasm" });
+  log("variant", variant || "plain", "crossOriginIsolated", self.crossOriginIsolated, "threads", env.backends.onnx.wasm.numThreads);
+  log("load ms", Math.round(performance.now() - t0), "texts", texts.length);
+  const one = async (t) => model(tok(t, { truncation: true, max_length: 256 }));
+  const o = await one(texts[0]); log("output", Object.keys(o).join(","), o.last_hidden_state?.dims.join("x"));
+  for (let i = 0; i < 3; i++) await one(texts[i]);
+  const ms = [];
+  for (let r = 0; r < 3; r++) for (const t of texts) { const s = performance.now(); await one(t); ms.push(performance.now() - s); }
+  ms.sort((a, b) => a - b); const q = (p) => ms[Math.floor(p * (ms.length - 1))].toFixed(1);
+  log(`per post ms (n=${ms.length}): median ${q(0.5)} p90 ${q(0.9)} max ${q(1)}`);
+  const long = texts.join("。").slice(0, 280); const lm = [];
+  for (let i = 0; i < 20; i++) { const s = performance.now(); await one(long); lm.push(performance.now() - s); }
+  lm.sort((a, b) => a - b); log(`280 chars (${tok(long).input_ids.dims[1]} tokens) median ms ${lm[10].toFixed(1)}`);
+  const ext = performance.getEntriesByType("resource").map((e) => e.name).filter((u) => new URL(u).origin !== location.origin);
+  log("requests to other sites", ext.length);
+  log("DONE");
+} catch (e) { log("ERROR", e?.message || e); }
+</script>
