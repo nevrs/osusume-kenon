@@ -18,3 +18,5 @@ private/
 store-*.json
 newacct*.json
 *.tsv
+# 分類器のモデル（D32。リポに入れない）
+*.onnx
