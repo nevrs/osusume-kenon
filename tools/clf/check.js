@@ -158,4 +158,4 @@ if (require.main === module) {
   overlap(rows, [path.join(root, "tools", "eval"), path.join(root, "research", "classifier-guide.md"), ...extra]);
 }
 
-module.exports = { load, splits };
+module.exports = { load, check, splits };

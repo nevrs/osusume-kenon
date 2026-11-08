@@ -1,0 +1,4 @@
+# train.py が使うもの（2026-11-08 に Python 3.13 で動かした版）。torch は CPU 版: pip install torch --index-url https://download.pytorch.org/whl/cpu
+torch==2.15.0
+transformers==5.12.1
+numpy==2.5.4
