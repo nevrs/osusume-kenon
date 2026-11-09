@@ -1,7 +1,7 @@
 # 学んだ分類器を、本人の記録で今の判定（ev1）と並べる（DESIGN.md D32 の ⑤）。記録・正解・結果は dev の private にだけ置く（AGENTS.md）
-# python tools/clf/real.py blind <書き出しの JSON> <置き場> [--nokana 150]   ev1 の判定が付いた投稿（同じ本文は 1 本）と、かなを含まない投稿を混ぜて、本文だけの表を作る
+# python tools/clf/real.py blind <書き出しの JSON> <置き場> [--nokana 150] [--exclude <前の置き場>]   ev1 の判定が付いた投稿（同じ本文は 1 本）と、かなを含まない投稿を混ぜて、本文だけの表を作る
 # python tools/clf/real.py run <置き場> --runs 3=<重みの置き場>,<…>,<…> [2=…]   重みごとの確からしさを書く
-# python tools/clf/real.py score <置き場> --labels <正解のファイル> --main 3 [--diag]   比べる（--diag は点検のための数。入れるかの判断には使わない）
+# python tools/clf/real.py score <置き場> --labels <正解のファイル> --main 3 [--diag] [--sieve]   比べる（--diag は点検のための数。入れるかの判断には使わない。--sieve は ev1 にかける前のふるいに使ったときの数）
 # 正解のファイル: 1 行に「id 高温 とげ 重い段 [型] [印]」。書いていない id は 0 0 0。型は ind・part・whole・excl・threat。印 a = 迷う文、n = 人の集団の名前が出る（とげでない文）
 # 本文は表にだけ書き、画面には出さない（blind）。ev1 の答えは key.json に分けて置く。正解を付けるあいだは、key.json と分類器の答えを見ない
 import argparse, json, pathlib, random, re, sys
@@ -16,12 +16,15 @@ KANA = re.compile("[ぁ-ゖァ-ヺ]")
 
 def blind(args):
     rows = json.loads(pathlib.Path(args.export).read_text(encoding="utf8"))["rows"]
+    skip = {t for d in args.exclude or [] for _, t in texts(pathlib.Path(d))}  # 前の表に入れた本文は入れない
     seen, judged, nokana = set(), [], []
     for r in rows:  # 同じ本文は、最初に出た行（そのおすすめかフォロー中か）だけを残す
         t = r["text"].replace("\t", " ")
         if t in seen:
             continue
         seen.add(t)
+        if t in skip:
+            continue
         if str(r.get("jv", "")).startswith("ev1/"):  # 今の判定（ev1。feed-judge.js）が付いた行
             judged.append((t, r))
         elif not KANA.search(t) and t.strip():
@@ -40,7 +43,7 @@ def blind(args):
                       "ev1": [int(bool(r[k])) for k in ("c", "g", "x")] if str(r.get("jv", "")).startswith("ev1/") else None}
     (out / "blind.tsv").write_text("\n".join(lines) + "\n", encoding="utf8")
     (out / "key.json").write_text(json.dumps(key, ensure_ascii=False), encoding="utf8")
-    print(f"ev1 の判定が付いた投稿 {len(judged)} 本・かなを含まない投稿 {len(nokana)} 本。書いた先: {out}")
+    print(f"ev1 の判定が付いた投稿 {len(judged)} 本・かなを含まない投稿 {len(nokana)} 本（前の表と同じ本文 {len(skip & seen)} 本を除いた）。書いた先: {out}")
 
 
 def texts(d):
@@ -113,6 +116,7 @@ def score(args):
     J = [i for i in key if key[i]["ev1"] and not lab[i]["amb"]]
     rng = np.random.default_rng(0)
     boot = rng.integers(0, len(J), size=(2000, len(J)))
+    q = lambda a: f"{np.percentile(a, 5):.2f}〜{np.percentile(a, 95):.2f}"
     print(f"ev1 の判定が付いた投稿 {sum(1 for i in key if key[i]['ev1'])} 本（迷う文 {sum(1 for i in key if key[i]['ev1'] and lab[i]['amb'])} 本を除いて {len(J)} 本で数える）")
     print("正解の本数: " + "  ".join(f"{k} {sum(lab[i][k] for i in J)}" for k in L) + "  型: " + json.dumps({t: sum(1 for i in J if lab[i]["kind"] == t) for t in ("ind", "part", "whole", "excl", "threat")}))
 
@@ -123,7 +127,6 @@ def score(args):
         he = np.array([bool(ev1[i][j]) for i in J])
         diff = np.array([f1(y[b], hc[b]) - f1(y[b], he[b]) for b in boot])
         fc = np.array([f1(y[b], hc[b]) for b in boot]); fe = np.array([f1(y[b], he[b]) for b in boot])
-        q = lambda a: f"{np.percentile(a, 5):.2f}〜{np.percentile(a, 95):.2f}"
         print(f"\n== {k}（正解 {y.sum()} 本）")
         for name, h, fb in (("分類器", hc, fc), ("ev1", he, fe)):
             r, p = rate(y, h)
@@ -140,16 +143,43 @@ def score(args):
 
     # おすすめ ÷ フォロー中
     fy = np.array([key[i]["feed"] == "for-you" for i in J])
+
+    def ratio_line(k, name, v):
+        v = np.array(v, float)
+        ratio = lambda b: v[b][fy[b]].mean() / v[b][~fy[b]].mean() if v[b][~fy[b]].mean() else (np.inf if v[b][fy[b]].mean() else np.nan)  # フォロー中だけ 0 なら ∞、両方 0 なら出せない
+        rs = np.array([ratio(b) for b in boot])
+        rs = rs[~np.isnan(rs)]
+        fmt = lambda x: "—" if np.isnan(x) else f"{x:.2f}" if np.isfinite(x) else "∞"
+        pc = lambda t: np.percentile(rs, t, method="nearest") if len(rs) else np.nan  # ∞ をまたいで混ぜない
+        print(f" {k} {name}: {v[fy].mean() * 100:.1f}% ÷ {v[~fy].mean() * 100:.1f}% = {fmt(ratio(np.arange(len(J))))}（{fmt(pc(5))}〜{fmt(pc(95))}）")
+
     print(f"\nおすすめ ÷ フォロー中（おすすめ {fy.sum()} 本・フォロー中 {(~fy).sum()} 本。1 より大きいほどおすすめに多い。かっこは 90% の幅）")
     for j, k in ((1, "thorn"), (2, "grave")):
         for name, v in (("正解", [lab[i][k] for i in J]), ("ev1", [ev1[i][j] for i in J]), ("分類器", [int(avg[i][j] >= 0.5) for i in J])):
-            v = np.array(v, float)
-            ratio = lambda b: v[b][fy[b]].mean() / v[b][~fy[b]].mean() if v[b][~fy[b]].mean() else (np.inf if v[b][fy[b]].mean() else np.nan)  # フォロー中だけ 0 なら ∞、両方 0 なら出せない
-            rs = np.array([ratio(b) for b in boot])
-            rs = rs[~np.isnan(rs)]
-            fmt = lambda x: "—" if np.isnan(x) else f"{x:.2f}" if np.isfinite(x) else "∞"
-            pc = lambda t: np.percentile(rs, t, method="nearest") if len(rs) else np.nan  # ∞ をまたいで混ぜない
-            print(f" {k} {name}: {v[fy].mean() * 100:.1f}% ÷ {v[~fy].mean() * 100:.1f}% = {fmt(ratio(np.arange(len(J))))}（{fmt(pc(5))}〜{fmt(pc(95))}）")
+            ratio_line(k, name, v)
+
+    # ev1 にかける前のふるい: 本命のとげの線 0.5 を通った投稿だけを ev1 にかけ、通らない投稿はとげでも重い段でもないと数える。
+    # かなを含まない投稿は、分類器の土台が日本語用なので、ふるいを通さずに ev1 にかける
+    if args.sieve:
+        ok = {i: bool(avg[i][1] >= 0.5 or key[i]["nokana"]) for i in J}
+        f = np.array([ok[i] for i in J])
+        print(f"\n== ふるい: ev1 にかける投稿 {f.sum()} 本（うち、かなを含まない {sum(key[i]['nokana'] for i in J)} 本）・割合 {f.mean():.3f}（{q([f[b].mean() for b in boot])}）")
+        for j, k in ((1, "thorn"), (2, "grave")):
+            y = np.array([lab[i][k] for i in J], bool)
+            he = np.array([bool(ev1[i][j]) for i in J])
+            hs = he & f
+            print(f" {k}（正解 {y.sum()} 本。そのうち、ふるいを通った {(y & f).sum()} 本）")
+            for name, h in (("ev1", he), ("ふるい+ev1", hs)):
+                r, p = rate(y, h)
+                print(f"  {name}: 出した {h.sum()} 本・拾えた割合 {r:.2f}・出したうちの当たり {p:.2f}・F1 {f1(y, h):.2f}（{q([f1(y[b], h[b]) for b in boot])}）")
+            print(f"  F1 の差（ふるい+ev1 − ev1）: {f1(y, hs) - f1(y, he):+.2f}（{q([f1(y[b], hs[b]) - f1(y[b], he[b]) for b in boot])}）")
+            print(f"  ev1 が当てた {(he & y).sum()} 本のうち、ふるいで落ちた {(he & y & ~f).sum()} 本")
+        print(f" 人の集団の名前が出る、とげでない文 {len(N)} 本で、出した本数: " + "  ".join(
+            f"{k} ev1 {sum(ev1[i][j] for i in N)}・ふるい+ev1 {sum(ev1[i][j] and ok[i] for i in N)}" for j, k in ((1, "thorn"), (2, "grave"))))
+        print(" おすすめ ÷ フォロー中")
+        for j, k in ((1, "thorn"), (2, "grave")):
+            for name, v in (("正解", [lab[i][k] for i in J]), ("ev1", [ev1[i][j] for i in J]), ("ふるい+ev1", [int(ev1[i][j] and ok[i]) for i in J])):
+                ratio_line(k, name, v)
 
     # 重みごと（参考）
     print("\n重みごと（ev1 の判定が付いた投稿・迷う文を除く。拾えた割合/出したうちの当たり/並べたときの当たり）")
@@ -209,11 +239,13 @@ if __name__ == "__main__":
     a.add_argument("paths", nargs="+", help="blind は 書き出しの JSON と置き場、run と score は置き場")
     a.add_argument("--nokana", type=int, default=150)
     a.add_argument("--seed", type=int, default=0)
+    a.add_argument("--exclude", nargs="+", help="blind で、この置き場の表にある本文を入れない")
     a.add_argument("--runs", nargs="+")
     a.add_argument("--labels")
     a.add_argument("--main", default="3")
     a.add_argument("--show", action="store_true", help="score で、本命が外した文を出す")
     a.add_argument("--diag", action="store_true", help="score で、点検のための数を出す（入れるかの判断には使わない）")
+    a.add_argument("--sieve", action="store_true", help="score で、分類器を ev1 にかける前のふるいに使ったときの数を出す")
     args = a.parse_args()
     if len(args.paths) != (2 if args.mode == "blind" else 1):
         a.error("blind には 書き出しの JSON と置き場、run と score には置き場だけを渡す")
