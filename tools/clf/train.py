@@ -1,6 +1,7 @@
 # 作り物の文（tools/clf/synth）で、高温・とげ・重い段を見分ける小さな分類器を学ばせる（DESIGN.md D32 の ④・D33。決まりは research/classifier-guide.md）。
 # python tools/clf/train.py cv --mix names+join --lr 5e-5 --epochs 8 [--fold 0〜4]   学習用の文を 5 つに分けて回し、設定を選ぶ（確かめ用の文は見ない）
 # python tools/clf/train.py final --mix names+join --lr 5e-5 --epochs 4   学習用の文すべてで学び、確かめ用の文で 1 度だけ測る
+# python tools/clf/train.py eval --model private/clf/final-… [--files i-gaps.jsonl]   学んだ重みで、確かめ用の文（そのファイルの分だけ、など）を測り直す
 # 取り分けは check.js の splits を node で呼ぶ。重みと結果は private/clf/ に書く（.gitignore 済み。同梱は ⑥ で決める）。要るもの: requirements.txt
 import argparse, json, pathlib, random, re, subprocess, sys, time, zlib
 import numpy as np, torch
@@ -47,8 +48,12 @@ END = "。！？!?…ｗw）)」"
 
 def join(rows, rng, n):
     out = []
-    while len(out) < n:
-        parts = rng.sample(rows, rng.choice([2, 2, 3]))
+    if len({r["group"] for r in rows}) < 2:  # 組が 1 つだけだと、つなげる文が無い
+        return out
+    for _ in range(n * 100):  # どう組んでも 160 字を超えるときに、回り続けないように
+        if len(out) >= n:
+            break
+        parts = rng.sample(rows, min(rng.choice([2, 2, 3]), len(rows)))
         if len({p["group"] for p in parts}) < len(parts):  # 対の文どうしはつながない
             continue
         text = parts[0]["text"]
@@ -188,13 +193,12 @@ def best_th(y, p):
     return best[1]
 
 
-def final(data, args):
-    tr, te = [r for r in data if r["split"] == "train"], [r for r in data if r["split"] == "test"]
+def evaluate(model, tok, te, th):  # 確かめ用の文で測る（名前に替えた文・伏せ字のままの文・つないだ文。対の文。外した文）
     te_f = fixed(te)
     sets = {"plain": te_f, "masked": te, "long": join(te_f, random.Random(0), len(te) // 2)}
-    model, tok, hist = fit(tr, args)
-    th = args.threshold or [0.5, 0.5, 0.5]
-    res = {"mix": args.mix, "lr": args.lr, "epochs": args.epochs, "seed": args.seed, "threshold": th, "base": f"{BASE}@{REV}", "train": len(tr), "test": len(te)}
+    if not sets["long"]:
+        del sets["long"]
+    res = {"threshold": th, "test": len(te)}
     probs = {}
     for name, rows in sets.items():
         p = predict(model, tok, rows)
@@ -222,23 +226,47 @@ def final(data, args):
                     if same:
                         gaps.append({"ids": [te_f[a]["id"], te_f[b]["id"]], "gap": round(float(np.abs(p[a] - p[b]).max()), 3), "same_text": te_f[a]["text"] == te_f[b]["text"]})
     res["pairs"] = {"flip": flips, "same": gaps}
+    res["probs"] = {r["id"]: [float(x) for x in p[i]] for i, r in enumerate(te_f)}  # 文ごとの確からしさ（名前に替えた文）。ほかの回の重みと、同じ文どうしで比べるため
     # 外した文（作り物の文なので、id と文をそのまま残してよい）
     res["misses"] = [{"id": r["id"], "kind": r["kind"], "amb": r["amb"], "text": r["text"], **{k: [r[k], round(float(p[i, j]), 2)] for j, k in enumerate(LABELS)}}
                      for i, r in enumerate(te_f) if any((p[i, j] >= th[j]) != bool(r[k]) for j, k in enumerate(LABELS))]
-    out = pathlib.Path(args.out) if args.out else root / "private" / "clf" / f"final-{args.mix}-{args.lr}-{args.epochs}-s{args.seed}"
-    out.mkdir(parents=True, exist_ok=True)
-    model.save_pretrained(out)
-    tok.save_pretrained(out)
-    (out / "result.json").write_text(json.dumps(res, ensure_ascii=False, indent=1), encoding="utf8")
-    for name in sets:
+    return res
+
+
+def show(res, out):
+    for name in [n for n in ("plain", "masked", "long") if n in res]:
         print(name, json.dumps(res[name], ensure_ascii=False))
     print("対:", json.dumps(res["pairs"]["flip"]), "印が同じ組の差:", " ".join(f"{g['ids'][0]}/{g['ids'][1]} {g['gap']}" for g in res["pairs"]["same"]))
     print(f"外した文 {len(res['misses'])} 本。書いた先: {out}")
 
 
+def final(data, args):
+    tr, te = [r for r in data if r["split"] == "train"], [r for r in data if r["split"] == "test"]
+    model, tok, _ = fit(tr, args)
+    res = {"mix": args.mix, "lr": args.lr, "epochs": args.epochs, "seed": args.seed, "base": f"{BASE}@{REV}", "train": len(tr),
+           **evaluate(model, tok, te, args.threshold or [0.5, 0.5, 0.5])}
+    out = pathlib.Path(args.out) if args.out else root / "private" / "clf" / f"final-{args.mix}-{args.lr}-{args.epochs}-s{args.seed}"
+    out.mkdir(parents=True, exist_ok=True)
+    model.save_pretrained(out)
+    tok.save_pretrained(out)
+    (out / "result.json").write_text(json.dumps(res, ensure_ascii=False, indent=1), encoding="utf8")
+    show(res, out)
+
+
+def reeval(data, args):  # 前に学んだ重みを、今の文で測り直す（足した文の確かめ用の分で、学び直しの前と後を比べるため）
+    te = [r for r in data if r["split"] == "test" and (not args.files or r["file"] in args.files)]
+    if not te:
+        sys.exit("確かめ用の文が 0 本（--files の名前を確かめる）")
+    tok, model = AutoTokenizer.from_pretrained(args.model), AutoModelForSequenceClassification.from_pretrained(args.model)
+    res = {"model": args.model, "files": args.files, **evaluate(model, tok, te, args.threshold or [0.5, 0.5, 0.5])}
+    out = pathlib.Path(args.model) / f"eval-{'+'.join(f.removesuffix('.jsonl') for f in args.files or []) or 'all'}.json"
+    out.write_text(json.dumps(res, ensure_ascii=False, indent=1), encoding="utf8")
+    show(res, out)
+
+
 if __name__ == "__main__":
     ap_ = argparse.ArgumentParser()
-    ap_.add_argument("mode", choices=["cv", "final"])
+    ap_.add_argument("mode", choices=["cv", "final", "eval"])
     ap_.add_argument("--mix", default="names+join", choices=["none", "names", "names+join"])
     ap_.add_argument("--lr", type=float, default=5e-5)
     ap_.add_argument("--epochs", type=int, default=4)
@@ -246,5 +274,9 @@ if __name__ == "__main__":
     ap_.add_argument("--fold", type=int, choices=range(FOLDS), help="cv で、この分けだけを回して書いておく（あとで --fold なしで続きと合わせる）")
     ap_.add_argument("--threshold", type=float, nargs=3, help="intense thorn grave の線（cv が出したもの）")
     ap_.add_argument("--out")
+    ap_.add_argument("--model", help="eval で測る重みの置き場")
+    ap_.add_argument("--files", nargs="+", help="eval で、このファイル（tools/clf/synth の名前）の確かめ用の文だけを測る")
     a = ap_.parse_args()
-    (cv if a.mode == "cv" else final)(load(), a)
+    if a.mode == "eval" and not a.model:
+        ap_.error("eval には --model が要る")
+    {"cv": cv, "final": final, "eval": reeval}[a.mode](load(), a)

@@ -22,3 +22,6 @@ newacct*.json
 *.onnx
 # 学んだ重み（D32 の ④。private/ の外に書いたときに誤って入れないため）
 *.safetensors
+
+# Python が作る中間のファイル
+__pycache__/

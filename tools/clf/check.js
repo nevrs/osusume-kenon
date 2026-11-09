@@ -64,6 +64,7 @@ function check(rows, errs) {
 
 // 確かめ用の取り分け。同じ pair の文と、似た文を 1 つの組にまとめ、組ごとに 5 つに 1 つを確かめ用にする。
 // 対の片方を学び、もう片方で確かめると、結果が甘く出るため。言い換えの対は続けて書いたので、近くの行で話題の言葉（めずらしい 2 字）を共有するものもまとめる。④ の学習もこれを使う
+// 文を足すと、めずらしい 2 字が変わり、前からの文の組が分かれて取り分けが動くことがある（④ の 2 回目で 6 本）
 function splits(rows) {
   const g = rows.map((r) => tri(r.text)), b = rows.map((r) => bi(r.text)), df = {}, par = rows.map((_, i) => i);
   for (const s of b) for (const x of s) df[x] = (df[x] || 0) + 1;
